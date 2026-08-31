@@ -1,5 +1,6 @@
 ---
 import "../styles/global.css";
+import GameCanvas from "../components/GameCanvas";
 ---
 
 <!doctype html>
@@ -7,10 +8,10 @@ import "../styles/global.css";
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>COMP4020 prototype</title>
+    <title>Ashen Hollow</title>
     <meta
       name="description"
-      content="Replace this with one sentence saying what this page is. A search result and a link preview both show it."
+      content="Ashen Hollow: a short, original side-scrolling action roguelite about a masked wanderer and a single dash-slash through a ruined sanctuary."
     />
 
     <!--
@@ -23,17 +24,14 @@ import "../styles/global.css";
     <meta name="twitter:card" content="summary_large_image" />
   </head>
   <body>
-    <header>
+    <header class="visually-hidden">
       <nav aria-label="Primary">
         <a href="./">Home</a>
       </nav>
+      <h1>Ashen Hollow</h1>
     </header>
     <main>
-      <h1>COMP4020 prototype</h1>
-      <p>
-        Replace this with your prototype. This week's brief is on the course website;
-        <code>spec/README.md</code> explains how the checks in this repo relate to it.
-      </p>
+      <GameCanvas client:load />
     </main>
   </body>
 </html>
