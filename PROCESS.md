@@ -69,6 +69,40 @@ in the ruin, waiting for the first press.
    health.
    [`c68a119`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit5-TaveWang/commit/c68a119)
 
+5. **Two deliberate departures from the brief's small-scope framing, both
+   asked for directly rather than assumed.** The original level was a
+   single flat room, which read as too plain once played end-to-end. The
+   first pass added gaps, tiers, moving platforms, and hazards built on the
+   game's own jump-physics numbers (max plain-jump height ≈131px, checked
+   against each gap/rise), verified with a frame-accurate browser trace of
+   Level 0's 140px gap clearing and Level 2's 240px gap correctly failing.
+   [`32ead79`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit5-TaveWang/commit/32ead79)
+
+   The second pass went further: rather than a linear vertically-winding
+   path, each level (except the tutorial and the boss floor, deliberately
+   left alone) became a real branching, backtrackable layout --- a fork, a
+   dead-end detour, and a route that reconnects, with a genuine vertical
+   camera follow (`camera.y`, `src/game/run.ts`) replacing the old hardcoded
+   `y: 0`. This needed real engine changes, not just new level data:
+   `findLanding` already generalized to any `y`, but enemy aggro/attack
+   range was x-only (`Math.abs`) and had to become 2D (`Math.hypot`,
+   `src/game/enemies.ts`) so an enemy one platform up couldn't falsely
+   telegraph at a player it can't reach, and the old ground-relative
+   `safeEncounterStartX`/`snapToGround` spawn logic (which assumed every
+   entry point sat on flat ground) was replaced with an explicit
+   `entryX`/`entryY` per level so a level can now open onto a mid-air
+   platform (Level 3's entrance shaft starts at `y: -260`).
+   [`fdbbc9b`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit5-TaveWang/commit/fdbbc9b)
+
+   Both moves are explicitly stylistically inspired by Dead Cells-style
+   verticality (shown as a reference during the crit conversation), not a
+   copy of any specific level layout, sprite, or asset --- every number
+   above (platform positions, gap widths, wall rects) is original and
+   derived from this game's own physics constants, and every visual is
+   still Canvas 2D primitives with nothing external to licence. Flagging
+   both here rather than presenting the bigger scope as if it were the
+   original plan.
+
 ## What I verified before shipping
 
 - `pnpm check` (typecheck, build, lint, spec + unit tests): green, 25/25
@@ -85,6 +119,15 @@ in the ruin, waiting for the first press.
   approaching enemy comes into view (narrower canvas, same logical height),
   but every enemy attack is still fully telegraphed within view before it
   can land at either viewport, so the fairness guarantee holds at both.
+- After the branching-map rework, walked every fork, dead-end, and climb in
+  all three reworked levels (junction ledges, zigzag rungs, both vertical
+  elevators, the Level 3 entrance shaft) at both marking viewports, using a
+  temporary debug hook in `GameCanvas.tsx` (added and then fully removed,
+  same as the earlier spawn-safety investigation) to confirm the player
+  settles correctly on every platform rather than falling through. Every
+  waypoint held; the vertical camera clamp tracks without jitter at both
+  viewports; the Level 3 shaft correctly opens at `y: -260` rather than
+  dropping straight onto the boss floor.
 
 ## Known limitations / left for the marked run
 
