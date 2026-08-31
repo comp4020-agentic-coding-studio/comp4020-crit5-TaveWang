@@ -113,7 +113,8 @@ export function updateEnemy(
 
   const t = TEMPLATES[enemy.kind];
   const toPlayer = player.pos.x - enemy.pos.x;
-  const distance = Math.abs(toPlayer);
+  const dy = player.pos.y - enemy.pos.y;
+  const distance = Math.hypot(toPlayer, dy);
   let { state, stateTimer, patrolFacing } = enemy;
   let vel = { ...enemy.vel };
   let damageToPlayer = 0;

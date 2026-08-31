@@ -1,12 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  LEVELS,
-  findLanding,
-  movingPlatformPositionAt,
-  resolveSurfaces,
-  snapToGround,
-  type MovingPlatform,
-} from "../src/game/level";
+import { LEVELS, findLanding, movingPlatformPositionAt, resolveSurfaces, type MovingPlatform } from "../src/game/level";
 import { spawnEnemy, updateEnemy } from "../src/game/enemies";
 import { createInitialPlayer, createInitialRun, update } from "../src/game/run";
 import type { PlayerState, RunState } from "../src/game/types";
@@ -79,10 +72,11 @@ describe("findLanding", () => {
   it("picks the highest of several qualifying surfaces", () => {
     const level2 = LEVELS[1];
     const surfaces = resolveSurfaces(level2, 0);
-    // x=940 sits under both tier platforms (800-1020 and 860-1060); falling
-    // through both should land on the higher one (tier2, y=210).
-    const landing = findLanding(surfaces, 940, 14, 0, 500);
-    expect(landing?.y).toBe(210);
+    // x=700 sits under L1 (660-840, y=520), L3 (660-840, y=720), and the
+    // bottom corridor ground (700-1200, y=920); falling through all three
+    // should land on the highest, L1 (y=520).
+    const landing = findLanding(surfaces, 700, 14, 0, 1000);
+    expect(landing?.y).toBe(520);
   });
 
   it("still lands when prevY === nextY === surfaceY (dashing in place)", () => {
@@ -92,22 +86,6 @@ describe("findLanding", () => {
     const landing = findLanding(surfaces, x, 14, platform.y, platform.y);
     expect(landing).not.toBeNull();
     expect(landing?.y).toBe(platform.y);
-  });
-});
-
-describe("snapToGround", () => {
-  it("leaves an x that is already over ground unchanged", () => {
-    const level = LEVELS[0];
-    expect(snapToGround(level, 200)).toBe(200);
-  });
-
-  it("never resolves inside a gap", () => {
-    const level = LEVELS[0]; // gap is 760-900
-    const snapped = snapToGround(level, 830);
-    const insideAGap = level.groundSegments.every((g) => !(snapped > g.x && snapped < g.x + g.width) || (snapped >= g.x && snapped <= g.x + g.width));
-    const onRealGround = level.groundSegments.some((g) => snapped >= g.x && snapped <= g.x + g.width);
-    expect(onRealGround).toBe(true);
-    expect(insideAGap).toBe(true);
   });
 });
 
@@ -181,5 +159,28 @@ describe("level structure", () => {
         expect(spawn.patrolMaxX).toBeLessThanOrEqual(surface.x + surface.width);
       }
     });
+
+    it(`${level.name}: entry point sits on real ground or a platform`, () => {
+      const onGround = level.groundSegments.some(
+        (g) => level.entryY === g.y && level.entryX >= g.x && level.entryX <= g.x + g.width,
+      );
+      const onPlatform = level.platforms.some(
+        (p) => level.entryY === p.y && level.entryX >= p.x && level.entryX <= p.x + p.width,
+      );
+      expect(onGround || onPlatform).toBe(true);
+    });
+
   }
+});
+
+describe("enemy aggro/attack range is 2D", () => {
+  it("does not telegraph or attack a player who is horizontally close but far above", () => {
+    let enemy = spawnEnemy("sentinel", 500, 420, 400, 600);
+    const player: PlayerState = { ...createInitialPlayer(), pos: { x: 520, y: 420 - 400 } };
+    for (let i = 0; i < 60; i++) {
+      enemy = updateEnemy(enemy, player, 1 / 60, true).enemy;
+    }
+    expect(enemy.state).not.toBe("telegraph");
+    expect(enemy.state).not.toBe("attack");
+  });
 });

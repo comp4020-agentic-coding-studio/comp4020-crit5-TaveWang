@@ -3,7 +3,14 @@
 // colour do the work that sprites would elsewhere.
 import type { Enemy, PlayerState, RunState } from "./types";
 import { getSlashHitbox } from "./combat";
-import { LEVELS, movingPlatformPositionAt, type GroundSegment, type Hazard, type StaticPlatform } from "./level";
+import {
+  LEVELS,
+  movingPlatformPositionAt,
+  type GroundSegment,
+  type Hazard,
+  type StaticPlatform,
+  type WallRect,
+} from "./level";
 
 const PALETTE = {
   bgFar: "#14121d",
@@ -11,6 +18,7 @@ const PALETTE = {
   bgNear: "#241f3d",
   ground: "#0d0c14",
   groundEdge: "#3a3552",
+  wall: "#241f3d",
   player: "#f2ede0",
   playerCore: "#e8b04b",
   slash: "#f6e7b1",
@@ -42,8 +50,9 @@ export function drawFrame(
   const level = LEVELS[state.encounterIndex];
 
   ctx.save();
-  ctx.translate(-state.camera.x + shakeX, shakeY);
+  ctx.translate(-state.camera.x + shakeX, -state.camera.y + shakeY);
 
+  for (const wall of level.walls) drawWall(ctx, wall);
   drawGround(ctx, level.groundSegments);
   for (const platform of level.platforms) drawPlatform(ctx, platform);
   for (const mp of level.movingPlatforms) {
@@ -92,6 +101,11 @@ function drawBackground(ctx: CanvasRenderingContext2D, width: number, height: nu
     ctx.arc(x + 90, height * 0.4, 70, 0, Math.PI * 2);
     ctx.fill();
   }
+}
+
+function drawWall(ctx: CanvasRenderingContext2D, wall: WallRect): void {
+  ctx.fillStyle = PALETTE.wall;
+  ctx.fillRect(wall.x, wall.y, wall.width, wall.height);
 }
 
 function drawGround(ctx: CanvasRenderingContext2D, segments: GroundSegment[]): void {

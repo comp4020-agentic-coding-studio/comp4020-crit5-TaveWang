@@ -10,20 +10,14 @@ import {
 } from "./combat";
 import { resetEnemyIds, spawnEnemy, updateEnemy } from "./enemies";
 import { rollUpgradeChoices, applyUpgrade } from "./upgrades";
-import {
-  LEVELS,
-  findLanding,
-  movingPlatformPositionAt,
-  resolveSurfaces,
-  snapToGround,
-  type LevelDef,
-} from "./level";
+import { LEVELS, findLanding, movingPlatformPositionAt, resolveSurfaces, type LevelDef } from "./level";
 import {
   BASE_STATS,
   COYOTE_TIME,
   GRAVITY,
   GROUND_Y,
   JUMP_BUFFER,
+  LOGICAL_HEIGHT,
   PLAYER_HEIGHT,
   PLAYER_WIDTH,
   SHAKE_ON_HIT,
@@ -62,10 +56,11 @@ function spawnEncounter(index: number): Enemy[] {
 
 export function createInitialRun(): RunState {
   resetEnemyIds();
+  const firstLevel = LEVELS[0];
   return {
     phase: "title",
     encounterIndex: 0,
-    player: createInitialPlayer(),
+    player: { ...createInitialPlayer(), pos: { x: firstLevel.entryX, y: firstLevel.entryY } },
     enemies: spawnEncounter(0),
     particles: [],
     upgradesTaken: [],
@@ -328,7 +323,10 @@ export function update(state: RunState, dtRaw: number, input: InputState, viewpo
 
   const camera = {
     x: Math.max(0, Math.min(Math.max(0, state.arenaWidth - viewportWidth), player.pos.x - viewportWidth / 2)),
-    y: 0,
+    y: Math.max(
+      level.worldTop,
+      Math.min(Math.max(level.worldTop, level.worldBottom - LOGICAL_HEIGHT), player.pos.y - LOGICAL_HEIGHT / 2),
+    ),
   };
 
   const runEnd = checkPlayerRunEnd(player);
@@ -398,35 +396,17 @@ export function update(state: RunState, dtRaw: number, input: InputState, viewpo
   };
 }
 
-// A dash can carry the player deep into the arena before the last enemy of an
-// encounter falls, so the *next* encounter's spawns (fixed offsets from the
-// arena's right edge) can otherwise land right on top of --- or past --- where
-// the player already is. That's exactly the "enemy spawning on the player"
-// case the brief forbids, so every encounter transition re-anchors the player
-// a safe distance left of its nearest spawn, clear of any enemy's attack
-// range, before the fight resumes.
-const ENCOUNTER_SAFETY_MARGIN = 320;
-
-function safeEncounterStartX(level: LevelDef, enemies: Enemy[]): number {
-  const leftGround = level.groundSegments[0];
-  const fallback = leftGround.x + 140;
-  if (enemies.length === 0) return snapToGround(level, fallback);
-  const leftmost = Math.min(...enemies.map((e) => e.pos.x));
-  return snapToGround(level, Math.max(fallback, leftmost - ENCOUNTER_SAFETY_MARGIN));
-}
-
 export function chooseUpgrade(state: RunState, id: UpgradeId): RunState {
   const upgraded = applyUpgrade(state.player, id);
   const nextIndex = state.encounterIndex + 1;
   const nextLevel = LEVELS[nextIndex];
   const enemies = spawnEncounter(nextIndex);
-  const startX = safeEncounterStartX(nextLevel, enemies);
   const player: PlayerState = {
     ...upgraded,
-    pos: { x: startX, y: GROUND_Y },
+    pos: { x: nextLevel.entryX, y: nextLevel.entryY },
     vel: { x: 0, y: 0 },
     onGround: true,
-    dash: { active: false, timer: 0, cooldownTimer: 0, dir: upgraded.facing, originY: GROUND_Y },
+    dash: { active: false, timer: 0, cooldownTimer: 0, dir: upgraded.facing, originY: nextLevel.entryY },
     hitEnemiesThisDash: new Set(),
     standingPlatformId: null,
   };

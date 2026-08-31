@@ -1,8 +1,9 @@
-// Level geometry: each encounter now plays out on its own multi-tier layout
-// instead of one shared flat room. Ground segments (with gaps between them),
-// static platforms, moving platforms and hazards are all plain data, so a
-// level's shape --- and whether every spawn actually sits on real ground ---
-// can be checked in `spec/level.test.ts` without touching the canvas.
+// Level geometry: each encounter now plays out on its own multi-tier, often
+// branching layout instead of one shared flat room. Ground segments (with
+// gaps between them), static platforms, moving platforms, hazards and
+// decorative walls are all plain data, so a level's shape --- and whether
+// every spawn and entry point actually sits on real ground --- can be checked
+// in `spec/level.test.ts` without touching the canvas.
 import type { EnemyKind, Vec2 } from "./types";
 
 export interface GroundSegment {
@@ -35,6 +36,13 @@ export interface Hazard {
   y: number;
 }
 
+export interface WallRect {
+  x: number;
+  width: number;
+  y: number;
+  height: number;
+}
+
 export interface LevelSpawn {
   kind: EnemyKind;
   x: number;
@@ -46,11 +54,16 @@ export interface LevelSpawn {
 export interface LevelDef {
   name: string;
   arenaWidth: number;
+  worldTop: number;
+  worldBottom: number;
+  entryX: number;
+  entryY: number;
   killPlaneY: number;
   groundSegments: GroundSegment[];
   platforms: StaticPlatform[];
   movingPlatforms: MovingPlatform[];
   hazards: Hazard[];
+  walls: WallRect[];
   spawns: LevelSpawn[];
 }
 
@@ -61,6 +74,10 @@ export const LEVELS: LevelDef[] = [
   {
     name: "Threshold",
     arenaWidth: 1400,
+    worldTop: 0,
+    worldBottom: 540,
+    entryX: 140,
+    entryY: GROUND_Y,
     killPlaneY: KILL_PLANE_Y,
     groundSegments: [
       { x: 0, width: 760, y: GROUND_Y },
@@ -69,36 +86,83 @@ export const LEVELS: LevelDef[] = [
     platforms: [{ x: 260, width: 160, y: 330 }],
     movingPlatforms: [],
     hazards: [],
+    walls: [],
     spawns: [{ kind: "drifter", x: 560, y: GROUND_Y, patrolMinX: 460, patrolMaxX: 680 }],
   },
   {
+    // "Two Tiers" -> descending fork + dead-end: past the entry gap, a
+    // floating junction ledge (J0) offers an optional dead-end alcove above,
+    // or a zigzag staircase / elevator fork descending into a bottom
+    // corridor where the level ends.
     name: "Two Tiers",
-    arenaWidth: 1800,
-    killPlaneY: KILL_PLANE_Y,
+    arenaWidth: 1300,
+    worldTop: 170,
+    worldBottom: 1120,
+    entryX: 100,
+    entryY: GROUND_Y,
+    killPlaneY: 1070,
     groundSegments: [
-      { x: 0, width: 600, y: GROUND_Y },
-      { x: 740, width: 1060, y: GROUND_Y },
+      { x: 0, width: 600, y: GROUND_Y }, // entry
+      { x: 700, width: 500, y: 920 }, // bottom corridor
     ],
     platforms: [
-      { x: 800, width: 220, y: 330 },
-      { x: 860, width: 200, y: 210 },
+      { x: 740, width: 200, y: GROUND_Y }, // J0 -- junction ledge past the gap
+      { x: 1000, width: 180, y: 330 }, // dead-end alcove (enemy-free)
+      { x: 660, width: 180, y: 520 }, // L1
+      { x: 850, width: 180, y: 620 }, // L2
+      { x: 660, width: 180, y: 720 }, // L3
+      { x: 850, width: 180, y: 820 }, // L4
     ],
-    movingPlatforms: [],
+    movingPlatforms: [
+      {
+        id: "mp_shaft1",
+        width: 140,
+        baseX: 1060,
+        amplitudeX: 0,
+        baseY: 680,
+        amplitudeY: 220,
+        period: 4.2,
+        phase: 0,
+      },
+    ],
     hazards: [],
+    walls: [
+      { x: 560, width: 50, y: 380, height: 600 }, // left frame
+      { x: 1230, width: 50, y: 380, height: 600 }, // right frame
+      { x: 1200, width: 50, y: 200, height: 220 }, // dead-end cap
+    ],
     spawns: [
-      { kind: "drifter", x: 1300, y: GROUND_Y, patrolMinX: 1180, patrolMaxX: 1420 },
-      { kind: "drifter", x: 940, y: 210, patrolMinX: 880, patrolMaxX: 1020 },
+      { kind: "drifter", x: 840, y: GROUND_Y, patrolMinX: 760, patrolMaxX: 920 }, // on J0, pre-fork
+      { kind: "drifter", x: 900, y: 920, patrolMinX: 780, patrolMaxX: 980 }, // on corridor, post-reconnect
     ],
   },
   {
+    // "Sentinel's Approach" -> unchanged gated gap + mp1 shuttle, then a
+    // climb fork (zigzag staircase vs vertical elevator) reconnecting on a
+    // high corridor, with a dead-end spur off its far end.
     name: "Sentinel's Approach",
-    arenaWidth: 2200,
-    killPlaneY: KILL_PLANE_Y,
+    arenaWidth: 2150,
+    worldTop: -640,
+    worldBottom: 600,
+    entryX: 100,
+    entryY: GROUND_Y,
+    killPlaneY: 570,
     groundSegments: [
-      { x: 0, width: 700, y: GROUND_Y },
-      { x: 940, width: 1260, y: GROUND_Y },
+      { x: 0, width: 700, y: GROUND_Y }, // pre-gap, unchanged
+      { x: 940, width: 1060, y: GROUND_Y }, // G1, safety net under the whole climb
+      { x: 1250, width: 650, y: -460 }, // high corridor
     ],
-    platforms: [{ x: 1050, width: 180, y: 330 }],
+    platforms: [
+      { x: 1050, width: 180, y: 330 }, // unchanged pre-climb bonus platform
+      { x: 1310, width: 180, y: 310 }, // A1
+      { x: 1530, width: 180, y: 200 }, // A2
+      { x: 1310, width: 180, y: 90 }, // A3
+      { x: 1530, width: 180, y: -20 }, // A4
+      { x: 1310, width: 180, y: -130 }, // A5
+      { x: 1530, width: 180, y: -240 }, // A6
+      { x: 1310, width: 180, y: -350 }, // A7
+      { x: 2000, width: 120, y: -460 }, // dead-end spur off the corridor
+    ],
     movingPlatforms: [
       {
         id: "mp1",
@@ -110,21 +174,48 @@ export const LEVELS: LevelDef[] = [
         period: 3.4,
         phase: 0,
       },
+      {
+        id: "mp_tower1",
+        width: 140,
+        baseX: 1900,
+        amplitudeX: 0,
+        baseY: -20,
+        amplitudeY: 440,
+        period: 4.6,
+        phase: 0,
+      },
     ],
-    hazards: [{ x: 1550, width: 60, height: 24, y: GROUND_Y }],
+    hazards: [{ x: 1240, width: 60, height: 24, y: GROUND_Y }],
+    walls: [
+      { x: 1260, width: 30, y: -500, height: 980 }, // left frame, staircase side
+      { x: 1730, width: 30, y: -500, height: 980 }, // divider between staircase and elevator
+      { x: 2140, width: 30, y: -500, height: 980 }, // right frame
+      { x: 1200, width: 750, y: -660, height: 40 }, // top cap
+    ],
     spawns: [
-      { kind: "sentinel", x: 1300, y: GROUND_Y, patrolMinX: 1150, patrolMaxX: 1500 },
-      { kind: "drifter", x: 1800, y: GROUND_Y, patrolMinX: 1700, patrolMaxX: 1950 },
+      { kind: "sentinel", x: 1450, y: -460, patrolMinX: 1320, patrolMaxX: 1650 },
+      { kind: "drifter", x: 1700, y: -460, patrolMinX: 1600, patrolMaxX: 1800 },
     ],
   },
   {
+    // "The Warden's Hall" (boss) -> unchanged flat boss floor, its two
+    // symmetric platforms, and mp2, gain only a short entrance shaft the
+    // player descends through on arrival. Deliberately the one level that
+    // stays one-way -- a boss arena is not the place for exploration.
     name: "The Warden's Hall",
     arenaWidth: 2600,
+    worldTop: -420,
+    worldBottom: 620,
+    entryX: 1900,
+    entryY: -260,
     killPlaneY: KILL_PLANE_Y,
     groundSegments: [{ x: 0, width: 2600, y: GROUND_Y }],
     platforms: [
       { x: 1700, width: 220, y: 330 },
       { x: 2100, width: 220, y: 330 },
+      { x: 1810, width: 180, y: -260 }, // R1 -- arrival ledge
+      { x: 1620, width: 160, y: -60 }, // R2
+      { x: 1870, width: 160, y: 140 }, // R3
     ],
     movingPlatforms: [
       {
@@ -139,6 +230,10 @@ export const LEVELS: LevelDef[] = [
       },
     ],
     hazards: [],
+    walls: [
+      { x: 1560, width: 40, y: -300, height: 760 },
+      { x: 2060, width: 40, y: -300, height: 760 },
+    ],
     spawns: [{ kind: "warden", x: 1900, y: GROUND_Y, patrolMinX: 1900, patrolMaxX: 1900 }],
   },
 ];
@@ -210,25 +305,4 @@ export function findLanding(
   if (candidates.length === 0) return null;
   candidates.sort((a, b) => a.y - b.y);
   return candidates[0];
-}
-
-// Any candidate x that isn't over real ground is pulled to the nearest real
-// ground edge --- used when re-anchoring the player at an encounter
-// transition, since a naive x can otherwise land over a gap.
-export function snapToGround(level: LevelDef, x: number): number {
-  for (const g of level.groundSegments) {
-    if (x >= g.x && x <= g.x + g.width) return x;
-  }
-  let best = level.groundSegments[0].x + 40;
-  let bestDist = Infinity;
-  for (const g of level.groundSegments) {
-    for (const candidate of [g.x + 40, g.x + g.width - 40]) {
-      const d = Math.abs(candidate - x);
-      if (d < bestDist) {
-        bestDist = d;
-        best = candidate;
-      }
-    }
-  }
-  return best;
 }
