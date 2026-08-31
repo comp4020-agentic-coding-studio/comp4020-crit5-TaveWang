@@ -46,6 +46,7 @@ export interface PlayerState {
   hitEnemiesThisDash: Set<string>;
   afterimageTimer: number;
   afterimagePos: Vec2 | null;
+  standingPlatformId: string | null;
 }
 
 export type EnemyKind = "drifter" | "sentinel" | "warden";
@@ -62,7 +63,8 @@ export interface Enemy {
   height: number;
   state: EnemyState;
   stateTimer: number;
-  patrolOrigin: number;
+  patrolMinX: number;
+  patrolMaxX: number;
   patrolFacing: FacingDir;
   telegraphDuration: number;
   attackDuration: number;

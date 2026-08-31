@@ -22,6 +22,7 @@ function makePlayer(overrides: Partial<PlayerState> = {}): PlayerState {
     hitEnemiesThisDash: new Set(),
     afterimageTimer: 0,
     afterimagePos: null,
+    standingPlatformId: null,
     ...overrides,
   };
 }
@@ -38,7 +39,8 @@ function makeEnemy(overrides: Partial<Enemy> = {}): Enemy {
     height: 34,
     state: "patrol",
     stateTimer: 0,
-    patrolOrigin: 240,
+    patrolMinX: 150,
+    patrolMaxX: 330,
     patrolFacing: -1,
     telegraphDuration: 0.9,
     attackDuration: 0.35,

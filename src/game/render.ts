@@ -3,7 +3,7 @@
 // colour do the work that sprites would elsewhere.
 import type { Enemy, PlayerState, RunState } from "./types";
 import { getSlashHitbox } from "./combat";
-import { GROUND_Y } from "./constants";
+import { LEVELS, movingPlatformPositionAt, type GroundSegment, type Hazard, type StaticPlatform } from "./level";
 
 const PALETTE = {
   bgFar: "#14121d",
@@ -39,10 +39,18 @@ export function drawFrame(
 
   drawBackground(ctx, width, height, state.camera.x);
 
+  const level = LEVELS[state.encounterIndex];
+
   ctx.save();
   ctx.translate(-state.camera.x + shakeX, shakeY);
 
-  drawGround(ctx, state.camera.x, width);
+  drawGround(ctx, level.groundSegments);
+  for (const platform of level.platforms) drawPlatform(ctx, platform);
+  for (const mp of level.movingPlatforms) {
+    const p = movingPlatformPositionAt(mp, state.time);
+    drawPlatform(ctx, { x: p.x, width: mp.width, y: p.y });
+  }
+  for (const hazard of level.hazards) drawHazard(ctx, hazard);
   for (const enemy of state.enemies) drawEnemy(ctx, enemy);
   drawPlayer(ctx, state.player);
   drawParticles(ctx, state.particles);
@@ -86,13 +94,37 @@ function drawBackground(ctx: CanvasRenderingContext2D, width: number, height: nu
   }
 }
 
-function drawGround(ctx: CanvasRenderingContext2D, camX: number, width: number): void {
-  const left = camX - 100;
-  const right = camX + width + 100;
-  ctx.fillStyle = PALETTE.ground;
-  ctx.fillRect(left, GROUND_Y, right - left, 400);
+function drawGround(ctx: CanvasRenderingContext2D, segments: GroundSegment[]): void {
+  for (const g of segments) {
+    ctx.fillStyle = PALETTE.ground;
+    ctx.fillRect(g.x, g.y, g.width, 400);
+    ctx.fillStyle = PALETTE.groundEdge;
+    ctx.fillRect(g.x, g.y - 4, g.width, 4);
+  }
+}
+
+function drawPlatform(ctx: CanvasRenderingContext2D, platform: StaticPlatform): void {
   ctx.fillStyle = PALETTE.groundEdge;
-  ctx.fillRect(left, GROUND_Y - 4, right - left, 4);
+  ctx.fillRect(platform.x, platform.y, platform.width, 14);
+  ctx.fillStyle = PALETTE.ground;
+  ctx.fillRect(platform.x, platform.y + 14, platform.width, 10);
+}
+
+function drawHazard(ctx: CanvasRenderingContext2D, hazard: Hazard): void {
+  ctx.fillStyle = PALETTE.telegraph;
+  ctx.globalAlpha = 0.75;
+  ctx.beginPath();
+  const spikes = Math.max(1, Math.round(hazard.width / 14));
+  const spikeWidth = hazard.width / spikes;
+  for (let i = 0; i < spikes; i++) {
+    const sx = hazard.x + i * spikeWidth;
+    ctx.moveTo(sx, hazard.y);
+    ctx.lineTo(sx + spikeWidth / 2, hazard.y - hazard.height);
+    ctx.lineTo(sx + spikeWidth, hazard.y);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.globalAlpha = 1;
 }
 
 function drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerState): void {

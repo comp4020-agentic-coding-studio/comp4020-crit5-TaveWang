@@ -1,21 +1,31 @@
-import type { Enemy, EnemyKind, Particle, PlayerState, RunState, UpgradeId } from "./types";
+import type { Enemy, Particle, PlayerState, RunState, UpgradeId } from "./types";
 import type { InputState } from "./input";
 import {
   applyDamageToPlayer,
   checkPlayerRunEnd,
   resolveSlashDamage,
+  rectsOverlap,
   startDash,
   updateDashTimers,
 } from "./combat";
 import { resetEnemyIds, spawnEnemy, updateEnemy } from "./enemies";
 import { rollUpgradeChoices, applyUpgrade } from "./upgrades";
 import {
-  ARENA_WIDTH,
+  LEVELS,
+  findLanding,
+  movingPlatformPositionAt,
+  resolveSurfaces,
+  snapToGround,
+  type LevelDef,
+} from "./level";
+import {
   BASE_STATS,
   COYOTE_TIME,
   GRAVITY,
   GROUND_Y,
   JUMP_BUFFER,
+  PLAYER_HEIGHT,
+  PLAYER_WIDTH,
   SHAKE_ON_HIT,
   SHAKE_ON_PLAYER_HIT,
   AFTERIMAGE_DAMAGE,
@@ -23,19 +33,8 @@ import {
   AFTERIMAGE_TICK,
 } from "./constants";
 
-// Each encounter is a small, escalating fight; the last one is the boss.
-// Spawn x-offsets are measured from the arena's right edge so the fight
-// always plays out in the same compact room regardless of arena width.
-interface EncounterDef {
-  spawns: { kind: EnemyKind; offsetFromRight: number }[];
-}
-
-const ENCOUNTERS: EncounterDef[] = [
-  { spawns: [{ kind: "drifter", offsetFromRight: 420 }] },
-  { spawns: [{ kind: "drifter", offsetFromRight: 480 }, { kind: "drifter", offsetFromRight: 280 }] },
-  { spawns: [{ kind: "sentinel", offsetFromRight: 460 }, { kind: "drifter", offsetFromRight: 260 }] },
-  { spawns: [{ kind: "warden", offsetFromRight: 420 }] },
-];
+const PLAYER_HALF_WIDTH = PLAYER_WIDTH / 2;
+const HAZARD_CONTACT_DAMAGE = 1;
 
 export function createInitialPlayer(): PlayerState {
   return {
@@ -52,12 +51,13 @@ export function createInitialPlayer(): PlayerState {
     hitEnemiesThisDash: new Set(),
     afterimageTimer: 0,
     afterimagePos: null,
+    standingPlatformId: null,
   };
 }
 
 function spawnEncounter(index: number): Enemy[] {
-  const def = ENCOUNTERS[index];
-  return def.spawns.map((s) => spawnEnemy(s.kind, ARENA_WIDTH - s.offsetFromRight, GROUND_Y));
+  const level = LEVELS[index];
+  return level.spawns.map((s) => spawnEnemy(s.kind, s.x, s.y, s.patrolMinX, s.patrolMaxX));
 }
 
 export function createInitialRun(): RunState {
@@ -76,7 +76,7 @@ export function createInitialRun(): RunState {
     shake: 0,
     hitPause: 0,
     phaseTimer: 0,
-    arenaWidth: ARENA_WIDTH,
+    arenaWidth: LEVELS[0].arenaWidth,
   };
 }
 
@@ -95,7 +95,19 @@ function spawnBurst(particles: Particle[], x: number, y: number, color: string, 
   }
 }
 
-function updatePlayerPhysics(player: PlayerState, input: InputState, dt: number, arenaWidth: number): PlayerState {
+interface PhysicsResult {
+  player: PlayerState;
+  fellIntoVoid: boolean;
+}
+
+function updatePlayerPhysics(
+  player: PlayerState,
+  input: InputState,
+  dt: number,
+  level: LevelDef,
+  time: number,
+): PhysicsResult {
+  const prevY = player.pos.y;
   let { pos, vel, onGround, coyoteTimer, jumpBufferTimer, facing } = player;
   pos = { ...pos };
   vel = { ...vel };
@@ -138,17 +150,38 @@ function updatePlayerPhysics(player: PlayerState, input: InputState, dt: number,
   pos.x += vel.x * dt;
   pos.y += vel.y * dt;
 
-  pos.x = Math.max(40, Math.min(arenaWidth - 40, pos.x));
+  pos.x = Math.max(40, Math.min(level.arenaWidth - 40, pos.x));
 
-  if (pos.y >= GROUND_Y) {
-    pos.y = GROUND_Y;
+  const surfaces = resolveSurfaces(level, time);
+  const landing = findLanding(surfaces, pos.x, PLAYER_HALF_WIDTH, prevY, pos.y);
+  let standingPlatformId: string | null = null;
+  if (landing) {
+    pos.y = landing.y;
     vel.y = 0;
     onGround = true;
+    standingPlatformId = landing.platformId;
   } else {
     onGround = false;
   }
 
-  return { ...player, pos, vel, onGround, coyoteTimer, jumpBufferTimer, facing };
+  // Ride along with the moving platform the player is standing on --- if it
+  // outruns the player's own reaction, they fall off, which is the intended
+  // difficulty of that mechanism, not a bug.
+  if (standingPlatformId) {
+    const mp = level.movingPlatforms.find((m) => m.id === standingPlatformId);
+    if (mp) {
+      const prev = movingPlatformPositionAt(mp, time - dt);
+      const curr = movingPlatformPositionAt(mp, time);
+      pos.x += curr.x - prev.x;
+    }
+  }
+
+  const fellIntoVoid = !onGround && pos.y > level.killPlaneY;
+
+  return {
+    player: { ...player, pos, vel, onGround, coyoteTimer, jumpBufferTimer, facing, standingPlatformId },
+    fellIntoVoid,
+  };
 }
 
 export interface UpdateResult {
@@ -196,7 +229,10 @@ export function update(state: RunState, dtRaw: number, input: InputState, viewpo
     return { state: { ...state, particles, time: state.time + dt }, events };
   }
 
-  let player = updatePlayerPhysics(state.player, input, dt, state.arenaWidth);
+  const level = LEVELS[state.encounterIndex];
+  const time = state.time + dt;
+  const physics = updatePlayerPhysics(state.player, input, dt, level, time);
+  let player = physics.player;
 
   if (input.dashPressed && !player.dash.active && player.dash.cooldownTimer <= 0) {
     player = startDash(player, player.facing);
@@ -250,6 +286,18 @@ export function update(state: RunState, dtRaw: number, input: InputState, viewpo
     return result.enemy;
   });
 
+  const playerRect = {
+    x: player.pos.x - PLAYER_WIDTH / 2,
+    y: player.pos.y - PLAYER_HEIGHT,
+    w: PLAYER_WIDTH,
+    h: PLAYER_HEIGHT,
+  };
+  for (const hazard of level.hazards) {
+    if (rectsOverlap(playerRect, { x: hazard.x, y: hazard.y - hazard.height, w: hazard.width, h: hazard.height })) {
+      damageToPlayer += HAZARD_CONTACT_DAMAGE;
+    }
+  }
+
   if (damageToPlayer > 0 && player.invulnTimer <= 0) {
     const before = player.health;
     player = applyDamageToPlayer(player, damageToPlayer);
@@ -258,6 +306,16 @@ export function update(state: RunState, dtRaw: number, input: InputState, viewpo
       shake = reducedMotion ? SHAKE_ON_PLAYER_HIT * 0.3 : SHAKE_ON_PLAYER_HIT;
       spawnBurst(particles, player.pos.x, player.pos.y - 24, "#c85b8a", 8);
     }
+  }
+
+  // A fall into a pit is a ring-out, not a hit --- it must bypass invuln
+  // entirely, or a player who falls while still invulnerable from a recent
+  // hit would fall forever with no defeat trigger.
+  if (physics.fellIntoVoid && player.health > 0) {
+    player = { ...player, health: 0 };
+    events.push("playerHit");
+    shake = reducedMotion ? SHAKE_ON_PLAYER_HIT * 0.3 : SHAKE_ON_PLAYER_HIT;
+    spawnBurst(particles, player.pos.x, player.pos.y - 24, "#c85b8a", 8);
   }
 
   const justDied = enemies.filter((e, i) => e.state === "dead" && state.enemies[i]?.state !== "dead");
@@ -293,7 +351,7 @@ export function update(state: RunState, dtRaw: number, input: InputState, viewpo
 
   const allDead = enemies.every((e) => e.state === "dead" && e.deathTimer <= 0);
   if (allDead && enemies.length > 0) {
-    const isLast = state.encounterIndex >= ENCOUNTERS.length - 1;
+    const isLast = state.encounterIndex >= LEVELS.length - 1;
     if (isLast) {
       events.push("victory");
       return {
@@ -349,23 +407,28 @@ export function update(state: RunState, dtRaw: number, input: InputState, viewpo
 // range, before the fight resumes.
 const ENCOUNTER_SAFETY_MARGIN = 320;
 
-function safeEncounterStartX(enemies: Enemy[]): number {
-  if (enemies.length === 0) return 140;
+function safeEncounterStartX(level: LevelDef, enemies: Enemy[]): number {
+  const leftGround = level.groundSegments[0];
+  const fallback = leftGround.x + 140;
+  if (enemies.length === 0) return snapToGround(level, fallback);
   const leftmost = Math.min(...enemies.map((e) => e.pos.x));
-  return Math.max(140, leftmost - ENCOUNTER_SAFETY_MARGIN);
+  return snapToGround(level, Math.max(fallback, leftmost - ENCOUNTER_SAFETY_MARGIN));
 }
 
 export function chooseUpgrade(state: RunState, id: UpgradeId): RunState {
   const upgraded = applyUpgrade(state.player, id);
   const nextIndex = state.encounterIndex + 1;
+  const nextLevel = LEVELS[nextIndex];
   const enemies = spawnEncounter(nextIndex);
+  const startX = safeEncounterStartX(nextLevel, enemies);
   const player: PlayerState = {
     ...upgraded,
-    pos: { x: safeEncounterStartX(enemies), y: GROUND_Y },
+    pos: { x: startX, y: GROUND_Y },
     vel: { x: 0, y: 0 },
     onGround: true,
     dash: { active: false, timer: 0, cooldownTimer: 0, dir: upgraded.facing, originY: GROUND_Y },
     hitEnemiesThisDash: new Set(),
+    standingPlatformId: null,
   };
   return {
     ...state,
@@ -374,6 +437,7 @@ export function chooseUpgrade(state: RunState, id: UpgradeId): RunState {
     upgradeChoices: [],
     encounterIndex: nextIndex,
     enemies,
+    arenaWidth: nextLevel.arenaWidth,
     phase: "encounter",
   };
 }

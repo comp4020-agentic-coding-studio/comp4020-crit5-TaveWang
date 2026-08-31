@@ -58,12 +58,18 @@ const TEMPLATES: Record<EnemyKind, EnemyTemplate> = {
   },
 };
 
-export function spawnEnemy(kind: EnemyKind, x: number, groundY: number): Enemy {
+export function spawnEnemy(
+  kind: EnemyKind,
+  x: number,
+  y: number,
+  patrolMinX: number,
+  patrolMaxX: number,
+): Enemy {
   const t = TEMPLATES[kind];
   return {
     id: `e${nextId++}`,
     kind,
-    pos: { x, y: groundY },
+    pos: { x, y },
     vel: { x: 0, y: 0 },
     health: t.health,
     maxHealth: t.health,
@@ -71,7 +77,8 @@ export function spawnEnemy(kind: EnemyKind, x: number, groundY: number): Enemy {
     height: t.height,
     state: "idle",
     stateTimer: 0,
-    patrolOrigin: x,
+    patrolMinX,
+    patrolMaxX,
     patrolFacing: -1,
     telegraphDuration: t.telegraphDuration,
     attackDuration: t.attackDuration,
@@ -124,12 +131,12 @@ export function updateEnemy(
         vel.x = 0;
         break;
       }
-      // Wander gently around the spawn point until the player is close
-      // enough to threaten --- this is what makes the first drifter safe to
-      // walk up to and observe.
-      const patrolReach = 90;
-      if (enemy.pos.x - enemy.patrolOrigin > patrolReach) patrolFacing = -1;
-      if (enemy.pos.x - enemy.patrolOrigin < -patrolReach) patrolFacing = 1;
+      // Wander within the spawn's platform until the player is close enough
+      // to threaten --- this is what makes the first drifter safe to walk up
+      // to and observe, and (on a tiered level) what stops it wandering off
+      // its own platform's edge.
+      if (enemy.pos.x >= enemy.patrolMaxX) patrolFacing = -1;
+      else if (enemy.pos.x <= enemy.patrolMinX) patrolFacing = 1;
       if (distance < t.aggroRange) {
         patrolFacing = toPlayer > 0 ? 1 : -1;
       }
@@ -167,7 +174,11 @@ export function updateEnemy(
       break;
   }
 
-  const pos = { x: enemy.pos.x + vel.x * dt, y: enemy.pos.y };
+  // Clamped in every state, not just patrol --- otherwise an aggro'd enemy
+  // on an elevated platform can walk (or lunge) straight off its own edge
+  // once levels have tiers instead of one flat room.
+  const rawX = enemy.pos.x + vel.x * dt;
+  const pos = { x: Math.max(enemy.patrolMinX, Math.min(enemy.patrolMaxX, rawX)), y: enemy.pos.y };
   return {
     enemy: { ...enemy, pos, vel, state, stateTimer, patrolFacing },
     damageToPlayer,
