@@ -163,7 +163,7 @@ export function restartRun(): RunState {
   return createInitialRun();
 }
 
-export function update(state: RunState, dtRaw: number, input: InputState): UpdateResult {
+export function update(state: RunState, dtRaw: number, input: InputState, viewportWidth: number): UpdateResult {
   const events: string[] = [];
   const dt = Math.min(dtRaw, 1 / 30);
 
@@ -182,7 +182,7 @@ export function update(state: RunState, dtRaw: number, input: InputState): Updat
 
   if (state.phase === "title") {
     if (input.left || input.right || input.jumpPressed || input.dashPressed) {
-      return update({ ...state, phase: "encounter" }, dt, input);
+      return update({ ...state, phase: "encounter" }, dt, input, viewportWidth);
     }
     const particles = advanceParticles(state.particles, dt);
     return { state: { ...state, particles, time: state.time + dt }, events };
@@ -269,7 +269,7 @@ export function update(state: RunState, dtRaw: number, input: InputState): Updat
   const advancedParticles = advanceParticles(particles, dt);
 
   const camera = {
-    x: Math.max(0, Math.min(state.arenaWidth - 960, player.pos.x - 480)),
+    x: Math.max(0, Math.min(Math.max(0, state.arenaWidth - viewportWidth), player.pos.x - viewportWidth / 2)),
     y: 0,
   };
 

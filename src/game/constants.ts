@@ -1,5 +1,13 @@
-export const GRAVITY = 2400;
-export const GROUND_Y = 480;
+// The game world is drawn in a fixed logical coordinate space, not raw CSS
+// pixels: the renderer scales logical units to fit whatever viewport it gets
+// (see loop.ts), holding vertical proportions --- ground height, jump arc,
+// HUD position --- constant whether the canvas is 1920x1080 or 390x844. Only
+// the height is fixed; visible horizontal extent is whatever the device's
+// aspect ratio gives at that height, which is the standard fit for a
+// side-scroller (narrower devices simply see less of the arena at once).
+export const LOGICAL_HEIGHT = 540;
+export const GRAVITY = 2200;
+export const GROUND_Y = 420;
 export const ARENA_WIDTH = 2600;
 export const PLAYER_WIDTH = 28;
 export const PLAYER_HEIGHT = 46;
