@@ -340,16 +340,40 @@ export function update(state: RunState, dtRaw: number, input: InputState, viewpo
   };
 }
 
+// A dash can carry the player deep into the arena before the last enemy of an
+// encounter falls, so the *next* encounter's spawns (fixed offsets from the
+// arena's right edge) can otherwise land right on top of --- or past --- where
+// the player already is. That's exactly the "enemy spawning on the player"
+// case the brief forbids, so every encounter transition re-anchors the player
+// a safe distance left of its nearest spawn, clear of any enemy's attack
+// range, before the fight resumes.
+const ENCOUNTER_SAFETY_MARGIN = 320;
+
+function safeEncounterStartX(enemies: Enemy[]): number {
+  if (enemies.length === 0) return 140;
+  const leftmost = Math.min(...enemies.map((e) => e.pos.x));
+  return Math.max(140, leftmost - ENCOUNTER_SAFETY_MARGIN);
+}
+
 export function chooseUpgrade(state: RunState, id: UpgradeId): RunState {
-  const player = applyUpgrade(state.player, id);
+  const upgraded = applyUpgrade(state.player, id);
   const nextIndex = state.encounterIndex + 1;
+  const enemies = spawnEncounter(nextIndex);
+  const player: PlayerState = {
+    ...upgraded,
+    pos: { x: safeEncounterStartX(enemies), y: GROUND_Y },
+    vel: { x: 0, y: 0 },
+    onGround: true,
+    dash: { active: false, timer: 0, cooldownTimer: 0, dir: upgraded.facing, originY: GROUND_Y },
+    hitEnemiesThisDash: new Set(),
+  };
   return {
     ...state,
     player,
     upgradesTaken: [...state.upgradesTaken, id],
     upgradeChoices: [],
     encounterIndex: nextIndex,
-    enemies: spawnEncounter(nextIndex),
+    enemies,
     phase: "encounter",
   };
 }
