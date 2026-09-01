@@ -142,6 +142,26 @@ in the ruin, waiting for the first press.
    with the warden below.
    [`ebcb193`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit5-TaveWang/commit/ebcb193)
 
+6. **A fifth departure: killing every enemy no longer ends a level by
+   itself.** Requested directly, changing the actual win condition rather
+   than tuning data: every enemy dead now only unlocks an exit somewhere in
+   the level, which the player still has to walk or dash to before the
+   encounter clears. This reused `"cleared"`, a value already declared on
+   `RunPhase` in `src/game/types.ts` but never actually set or read anywhere
+   --- exactly the "enemies down, not yet at the exit" state this needed, so
+   no new phase or branch had to be added to the phase machine in
+   `src/game/run.ts`; `"cleared"` simply falls through into the same
+   simulation body `"encounter"` already used. Each level's exit is an
+   anchor point (`exitX`/`exitY` on `LevelDef`, `src/game/level.ts`) the same
+   way `entryX`/`entryY` already worked, turned into a hitbox on demand by a
+   new `exitRect()` reusing the existing `rectsOverlap` check from
+   `combat.ts`. The exit always renders (`drawExit`, `src/game/render.ts`)
+   as a dim archway while any enemy survives and a pulsing, glowing one once
+   cleared, reusing the dash-cooldown ring's existing "ready" teal rather
+   than inventing a new colour --- the state change is the only "you can
+   leave now" signal, consistent with the no-tutorial-text constraint.
+   [`73dc001`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit5-TaveWang/commit/73dc001)
+
 ## What I verified before shipping
 
 - `pnpm check` (typecheck, build, lint, spec + unit tests): green, 25/25
