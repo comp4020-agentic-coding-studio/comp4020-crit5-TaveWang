@@ -1,3 +1,5 @@
+import type { FogState } from "./fog";
+
 export interface Vec2 {
   x: number;
   y: number;
@@ -91,6 +93,7 @@ export interface RunState {
   hitPause: number;
   phaseTimer: number;
   arenaWidth: number;
+  fog: FogState;
 }
 
 export interface Particle {

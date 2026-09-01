@@ -11,6 +11,7 @@ import {
   type StaticPlatform,
   type WallRect,
 } from "./level";
+import { FOG_CELL, isRevealed, terrainGridFor } from "./fog";
 
 const PALETTE = {
   bgFar: "#14121d",
@@ -31,6 +32,9 @@ const PALETTE = {
   dashReady: "#5bc8a8",
   dashCooling: "#332c46",
   text: "#cfc9de",
+  fogSeenAir: "rgba(207, 201, 222, 0.06)",
+  minimapPanel: "rgba(13, 12, 20, 0.72)",
+  minimapBorder: "rgba(207, 201, 222, 0.25)",
 };
 
 export function drawFrame(
@@ -248,7 +252,7 @@ function drawParticles(ctx: CanvasRenderingContext2D, particles: RunState["parti
   ctx.globalAlpha = 1;
 }
 
-function drawHud(ctx: CanvasRenderingContext2D, state: RunState, width: number, _height: number): void {
+function drawHud(ctx: CanvasRenderingContext2D, state: RunState, width: number, height: number): void {
   if (state.phase === "title") return;
   const player = state.player;
 
@@ -280,6 +284,68 @@ function drawHud(ctx: CanvasRenderingContext2D, state: RunState, width: number, 
   ctx.strokeStyle = ready ? PALETTE.dashReady : PALETTE.text;
   ctx.lineWidth = 4;
   ctx.stroke();
+
+  drawMinimap(ctx, state, width, height);
+}
+
+// A small fog-of-war map, bottom-right: the level's terrain is only drawn
+// where the player has already been (state.fog), so the layout is
+// discovered by exploring rather than visible up front.
+function drawMinimap(ctx: CanvasRenderingContext2D, state: RunState, width: number, height: number): void {
+  const level = LEVELS[state.encounterIndex];
+  const fog = state.fog;
+  const terrain = terrainGridFor(level);
+
+  const panelW = 168;
+  const panelH = 104;
+  const pad = 8;
+  const panelX = width - panelW - 14;
+  const panelY = height - panelH - 14;
+
+  ctx.fillStyle = PALETTE.minimapPanel;
+  ctx.beginPath();
+  ctx.roundRect(panelX, panelY, panelW, panelH, 6);
+  ctx.fill();
+  ctx.strokeStyle = PALETTE.minimapBorder;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  const worldH = level.worldBottom - level.worldTop;
+  const scale = Math.min((panelW - pad * 2) / level.arenaWidth, (panelH - pad * 2) / worldH);
+  const mapW = level.arenaWidth * scale;
+  const mapH = worldH * scale;
+  const originX = panelX + (panelW - mapW) / 2;
+  const originY = panelY + (panelH - mapH) / 2;
+
+  const cellPx = Math.max(1, FOG_CELL * scale);
+  for (let gy = 0; gy < fog.rows; gy++) {
+    for (let gx = 0; gx < fog.cols; gx++) {
+      if (!isRevealed(fog, gx, gy)) continue;
+      const hasTerrain = terrain[gy * fog.cols + gx] === 1;
+      ctx.fillStyle = hasTerrain ? PALETTE.groundEdge : PALETTE.fogSeenAir;
+      ctx.fillRect(originX + gx * cellPx, originY + gy * cellPx, cellPx + 0.5, cellPx + 0.5);
+    }
+  }
+
+  // The camera's current view, so the minimap reads as "where this screen sits".
+  ctx.strokeStyle = PALETTE.text;
+  ctx.globalAlpha = 0.5;
+  ctx.lineWidth = 1;
+  ctx.setLineDash([2, 2]);
+  ctx.strokeRect(
+    originX + state.camera.x * scale,
+    originY + (state.camera.y - level.worldTop) * scale,
+    width * scale,
+    height * scale,
+  );
+  ctx.setLineDash([]);
+  ctx.globalAlpha = 1;
+
+  // The player's own position is always known, fog or not.
+  ctx.fillStyle = PALETTE.playerCore;
+  ctx.beginPath();
+  ctx.arc(originX + state.player.pos.x * scale, originY + (state.player.pos.y - level.worldTop) * scale, 3, 0, Math.PI * 2);
+  ctx.fill();
 }
 
 function drawTitleOverlay(ctx: CanvasRenderingContext2D, width: number, height: number, time: number): void {

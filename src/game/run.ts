@@ -11,6 +11,7 @@ import {
 import { resetEnemyIds, spawnEnemy, updateEnemy } from "./enemies";
 import { rollUpgradeChoices, applyUpgrade } from "./upgrades";
 import { LEVELS, findLanding, movingPlatformPositionAt, resolveSurfaces, type LevelDef } from "./level";
+import { createFogState, revealAround } from "./fog";
 import {
   BASE_STATS,
   COYOTE_TIME,
@@ -72,6 +73,7 @@ export function createInitialRun(): RunState {
     hitPause: 0,
     phaseTimer: 0,
     arenaWidth: LEVELS[0].arenaWidth,
+    fog: createFogState(firstLevel),
   };
 }
 
@@ -228,6 +230,7 @@ export function update(state: RunState, dtRaw: number, input: InputState, viewpo
   const time = state.time + dt;
   const physics = updatePlayerPhysics(state.player, input, dt, level, time);
   let player = physics.player;
+  revealAround(state.fog, player.pos.x, player.pos.y);
 
   if (input.dashPressed && !player.dash.active && player.dash.cooldownTimer <= 0) {
     player = startDash(player, player.facing);
@@ -418,6 +421,7 @@ export function chooseUpgrade(state: RunState, id: UpgradeId): RunState {
     encounterIndex: nextIndex,
     enemies,
     arenaWidth: nextLevel.arenaWidth,
+    fog: createFogState(nextLevel),
     phase: "encounter",
   };
 }
