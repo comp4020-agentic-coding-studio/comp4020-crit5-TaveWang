@@ -125,9 +125,13 @@ function drawBackground(ctx: CanvasRenderingContext2D, width: number, height: nu
   }
 }
 
+// Plain fill, not a sprite --- the one wall texture found in the source pack
+// turned out to be a single decorative brick-pile graphic rather than a
+// seamlessly tileable one, so repeating it as a CanvasPattern along these
+// tall, narrow rects produced a visibly seamed stack of disjoint chunks.
+// Left as the flat palette colour instead of shipping that regression.
 function drawWall(ctx: CanvasRenderingContext2D, wall: WallRect): void {
-  const pattern = tilePattern(ctx, TILE_SPRITES.wall);
-  ctx.fillStyle = pattern ?? PALETTE.wall;
+  ctx.fillStyle = PALETTE.wall;
   ctx.fillRect(wall.x, wall.y, wall.width, wall.height);
 }
 

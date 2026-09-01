@@ -18,7 +18,6 @@ import sentinelUrl from "../assets/sprites/enemies/sentinel.png?url";
 import wardenUrl from "../assets/sprites/enemies/warden.png?url";
 import groundTileUrl from "../assets/sprites/tiles/ground.png?url";
 import platformTileUrl from "../assets/sprites/tiles/platform.png?url";
-import wallTileUrl from "../assets/sprites/tiles/wall.png?url";
 import exitTileUrl from "../assets/sprites/tiles/exit.png?url";
 import slashFxUrl from "../assets/sprites/effects/slash.png?url";
 import smokeFxUrl from "../assets/sprites/effects/smoke.png?url";
@@ -87,7 +86,6 @@ export const ENEMY_SPRITES: Record<EnemyKind, HTMLImageElement> = {
 export const TILE_SPRITES = {
   ground: loadImage(groundTileUrl),
   platform: loadImage(platformTileUrl),
-  wall: loadImage(wallTileUrl),
   exit: loadImage(exitTileUrl),
 };
 

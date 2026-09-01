@@ -31,8 +31,13 @@ states it.
 - `enemies/warden.png` ← `chain-warden.png`
 - `tiles/ground.png` ← `dungeon-stone-floor-32.png`
 - `tiles/platform.png` ← `dungeon-cracked-floor-32.png`
-- `tiles/wall.png` ← `dungeon-stone-wall.png`
 - `tiles/exit.png` ← `dungeon-arch-passage.png`
+
+`dungeon-stone-wall.png` was also downloaded for the decorative wall rects,
+but turned out to be a single non-tileable brick-pile graphic rather than a
+seamless tile like the floor/platform textures --- repeating it as a Canvas
+pattern along the tall, narrow wall rects produced a visibly seamed stack of
+disjoint chunks instead of a wall. Dropped; walls stay a flat colour fill.
 
 ## Hit/impact effects — `effects/`
 
