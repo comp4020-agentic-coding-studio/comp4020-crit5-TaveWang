@@ -87,7 +87,10 @@ export const LEVELS: LevelDef[] = [
     movingPlatforms: [],
     hazards: [],
     walls: [],
-    spawns: [{ kind: "drifter", x: 560, y: GROUND_Y, patrolMinX: 460, patrolMaxX: 680 }],
+    spawns: [
+      { kind: "drifter", x: 560, y: GROUND_Y, patrolMinX: 460, patrolMaxX: 680 },
+      { kind: "drifter", x: 1150, y: GROUND_Y, patrolMinX: 1000, patrolMaxX: 1300 },
+    ],
   },
   {
     // "Two Tiers" -> descending fork + dead-end: past the entry gap, a
@@ -125,7 +128,7 @@ export const LEVELS: LevelDef[] = [
         phase: 0,
       },
     ],
-    hazards: [],
+    hazards: [{ x: 900, width: 40, height: 16, y: 620 }], // spike on the L2 rung, forces a timed hop
     walls: [
       { x: 560, width: 50, y: 380, height: 600 }, // left frame
       { x: 1230, width: 50, y: 380, height: 600 }, // right frame
@@ -134,6 +137,7 @@ export const LEVELS: LevelDef[] = [
     spawns: [
       { kind: "drifter", x: 840, y: GROUND_Y, patrolMinX: 760, patrolMaxX: 920 }, // on J0, pre-fork
       { kind: "drifter", x: 900, y: 920, patrolMinX: 780, patrolMaxX: 980 }, // on corridor, post-reconnect
+      { kind: "drifter", x: 1080, y: 330, patrolMinX: 1030, patrolMaxX: 1150 }, // guarding the dead-end alcove
     ],
   },
   {
@@ -185,7 +189,10 @@ export const LEVELS: LevelDef[] = [
         phase: 0,
       },
     ],
-    hazards: [{ x: 1240, width: 60, height: 24, y: GROUND_Y }],
+    hazards: [
+      { x: 1240, width: 60, height: 24, y: GROUND_Y },
+      { x: 2040, width: 30, height: 14, y: -460 }, // spike on the dead-end spur
+    ],
     walls: [
       { x: 1260, width: 30, y: -500, height: 980 }, // left frame, staircase side
       { x: 1730, width: 30, y: -500, height: 980 }, // divider between staircase and elevator
@@ -195,6 +202,8 @@ export const LEVELS: LevelDef[] = [
     spawns: [
       { kind: "sentinel", x: 1450, y: -460, patrolMinX: 1320, patrolMaxX: 1650 },
       { kind: "drifter", x: 1700, y: -460, patrolMinX: 1600, patrolMaxX: 1800 },
+      { kind: "drifter", x: 1140, y: 330, patrolMinX: 1070, patrolMaxX: 1210 }, // guarding the pre-climb bonus platform
+      { kind: "drifter", x: 1900, y: GROUND_Y, patrolMinX: 1830, patrolMaxX: 1970 }, // guarding the elevator's boarding point
     ],
   },
   {
@@ -234,7 +243,10 @@ export const LEVELS: LevelDef[] = [
       { x: 1560, width: 40, y: -300, height: 760 },
       { x: 2060, width: 40, y: -300, height: 760 },
     ],
-    spawns: [{ kind: "warden", x: 1900, y: GROUND_Y, patrolMinX: 1900, patrolMaxX: 1900 }],
+    spawns: [
+      { kind: "warden", x: 1900, y: GROUND_Y, patrolMinX: 1900, patrolMaxX: 1900 },
+      { kind: "sentinel", x: 1950, y: 140, patrolMinX: 1890, patrolMaxX: 2010 }, // second front, up on R3
+    ],
   },
 ];
 
