@@ -5,7 +5,7 @@
 // frame it overlaps them --- the dash has to end and restart to hit again.
 import type { Enemy, FacingDir, PlayerState, Projectile, Rect } from "./types";
 import type { LevelDef } from "./level";
-import { INVULN_DURATION, MELEE_HITBOX_HEIGHT, SLASH_DAMAGE } from "./constants";
+import { INVULN_DURATION, MELEE_HITBOX_HEIGHT, PLAYER_HEIGHT, PLAYER_WIDTH, SLASH_DAMAGE } from "./constants";
 import { weaponById, weaponDamage } from "./weapons";
 
 export function rectsOverlap(a: Rect, b: Rect): boolean {
@@ -265,4 +265,52 @@ export function updateProjectiles(
   }
 
   return { enemies: nextEnemies, projectiles: surviving, hitIds };
+}
+
+export interface EnemyProjectileUpdateResult {
+  projectiles: Projectile[];
+  damage: number;
+}
+
+// Mirrors updateProjectiles but checks overlap against the player instead of
+// enemies --- the enemy-fired counterpart used by the wisp's bolts. Damage is
+// only accumulated here; applyDamageToPlayer (already invulnerability-gated)
+// is what actually applies it, same as contact damage.
+export function updateEnemyProjectiles(
+  projectiles: Projectile[],
+  player: PlayerState,
+  level: LevelDef,
+  dt: number,
+): EnemyProjectileUpdateResult {
+  let damage = 0;
+  const surviving: Projectile[] = [];
+  const playerBox: Rect = {
+    x: player.pos.x - PLAYER_WIDTH / 2,
+    y: player.pos.y - PLAYER_HEIGHT,
+    w: PLAYER_WIDTH,
+    h: PLAYER_HEIGHT,
+  };
+
+  for (const proj of projectiles) {
+    const pos = { x: proj.pos.x + proj.vel.x * dt, y: proj.pos.y + proj.vel.y * dt };
+    const life = proj.life - dt;
+    if (life <= 0 || pos.x < 0 || pos.x > level.arenaWidth) continue;
+
+    const projRect: Rect = { x: pos.x - 4, y: pos.y - 4, w: 8, h: 8 };
+
+    const hitWall = level.walls.some((w) => rectsOverlap(projRect, { x: w.x, y: w.y, w: w.width, h: w.height }));
+    if (hitWall) continue;
+
+    if (rectsOverlap(projRect, playerBox)) {
+      // Same one-hit-per-frame reasoning as the caller in run.ts: two bolts
+      // landing on the same frame shouldn't stack into a bigger hit than one
+      // bolt would deal.
+      damage = Math.max(damage, proj.damage);
+      continue;
+    }
+
+    surviving.push({ ...proj, pos, life });
+  }
+
+  return { projectiles: surviving, damage };
 }

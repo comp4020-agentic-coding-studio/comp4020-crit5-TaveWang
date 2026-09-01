@@ -39,6 +39,38 @@ seamless tile like the floor/platform textures --- repeating it as a Canvas
 pattern along the tall, narrow wall rects produced a visibly seamed stack of
 disjoint chunks instead of a wall. Dropped; walls stay a flat colour fill.
 
+`enemies/wisp.png` ← `evil-eye-floating-enemy-sprite.png`, for the new
+ranged-attack enemy (a floating eye that hangs back and fires bolts, in place
+of a procedural shape --- confirmed with the student that the ranged enemy
+should use real art in the existing style).
+
+## Weapon pickups — `weapons/`
+
+**"Free 16x16 Weapon RPG Icons"** by Shade
+<https://merchant-shade.itch.io/free-16x16-weapon-rpg-icons> — CC0 ("Feel
+free to use this for your game (commercially or not) ... No need to give me
+credit"). Ships as four material-tier sheets (bronze/iron/steel/gold); the
+gold-tier icons were used to match this game's existing warm accent colour
+(`playerCore`/`health` in `render.ts`'s palette).
+
+- `weapons/broadsword.png` ← the sword icon, gold tier
+- `weapons/dagger.png` ← the alt dagger icon, gold tier
+- `weapons/spear.png` ← the spear icon, gold tier (row 0, column 16 of the
+  sheet)
+
+The three ranged weapons come from **"Idylwild's Arsenal"** by Idylwild
+<https://opengameart.org/content/idylwilds-arsenal> — CC0, hand-pixelled at
+32×32 with no generative AI. The individual transparent icons were used
+without modification:
+
+- `weapons/throwing-knives.png` ← `throwing_knife1.png`
+- `weapons/shortbow.png` ← `bow1.png`
+- `weapons/crossbow.png` ← `crossbow2.png`
+
+Together these six files cover every entry in `WEAPON_POOL`; the procedural
+triangle/diamond is now only a first-frame loading fallback, never a missing-
+asset substitute.
+
 ## Hit/impact effects — `effects/`
 
 **Particle Pack** by Kenney <https://kenney.nl/assets/particle-pack> — CC0

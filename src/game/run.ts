@@ -11,10 +11,11 @@ import {
   startMeleeAttack,
   spawnProjectile,
   updateDashTimers,
+  updateEnemyProjectiles,
   updateProjectiles,
   updateWeaponTimers,
 } from "./combat";
-import { resetEnemyIds, spawnEnemy, updateEnemy } from "./enemies";
+import { resetEnemyIds, resetEnemyProjectileIds, spawnEnemy, updateEnemy } from "./enemies";
 import { rollUpgradeChoices, applyUpgrade } from "./upgrades";
 import { rollWeaponDrop, weaponById, WEAPON_DROP_CHANCE } from "./weapons";
 import { LEVELS, exitRect, findLanding, movingPlatformPositionAt, resolveSurfaces, type LevelDef } from "./level";
@@ -72,6 +73,7 @@ function spawnEncounter(index: number): Enemy[] {
 export function createInitialRun(): RunState {
   resetEnemyIds();
   resetProjectileIds();
+  resetEnemyProjectileIds();
   const firstLevel = LEVELS[0];
   return {
     phase: "title",
@@ -91,6 +93,7 @@ export function createInitialRun(): RunState {
     fog: createFogState(firstLevel),
     weaponPickups: [],
     projectiles: [],
+    enemyProjectiles: [],
     pendingPickup: null,
   };
 }
@@ -355,12 +358,24 @@ export function update(state: RunState, dtRaw: number, input: InputState, viewpo
     afterimagePos = null;
   }
 
+  // A hit's worth of damage, not a sum: several enemies (or an enemy and a
+  // hazard) can overlap the player on the very same frame, before the first
+  // one's hit has set invulnTimer --- summing their damage would let one
+  // unlucky frame cost multiple health points at once instead of the single
+  // hit the invulnerability window is meant to allow through.
   let damageToPlayer = 0;
+  let enemyProjectiles = state.enemyProjectiles;
+  const levelBounds = { minY: level.worldTop, maxY: level.worldBottom };
   enemies = enemies.map((enemy) => {
-    const result = updateEnemy(enemy, player, dt, true);
-    damageToPlayer += result.damageToPlayer;
+    const result = updateEnemy(enemy, player, dt, true, levelBounds);
+    damageToPlayer = Math.max(damageToPlayer, result.damageToPlayer);
+    if (result.projectileSpawn) enemyProjectiles = [...enemyProjectiles, result.projectileSpawn];
     return result.enemy;
   });
+
+  const enemyProjectileResult = updateEnemyProjectiles(enemyProjectiles, player, level, dt);
+  enemyProjectiles = enemyProjectileResult.projectiles;
+  damageToPlayer = Math.max(damageToPlayer, enemyProjectileResult.damage);
 
   const playerRect = {
     x: player.pos.x - PLAYER_WIDTH / 2,
@@ -370,7 +385,7 @@ export function update(state: RunState, dtRaw: number, input: InputState, viewpo
   };
   for (const hazard of level.hazards) {
     if (rectsOverlap(playerRect, { x: hazard.x, y: hazard.y - hazard.height, w: hazard.width, h: hazard.height })) {
-      damageToPlayer += HAZARD_CONTACT_DAMAGE;
+      damageToPlayer = Math.max(damageToPlayer, HAZARD_CONTACT_DAMAGE);
     }
   }
 
@@ -434,6 +449,7 @@ export function update(state: RunState, dtRaw: number, input: InputState, viewpo
           enemies,
           particles: advancedParticles,
           projectiles,
+          enemyProjectiles,
           weaponPickups: remainingPickups,
           shake,
           phase: "weaponChoice",
@@ -465,6 +481,7 @@ export function update(state: RunState, dtRaw: number, input: InputState, viewpo
         enemies,
         particles: advancedParticles,
         projectiles,
+        enemyProjectiles,
         weaponPickups,
         shake,
         camera,
@@ -491,6 +508,7 @@ export function update(state: RunState, dtRaw: number, input: InputState, viewpo
           enemies,
           particles: advancedParticles,
           projectiles,
+          enemyProjectiles,
           weaponPickups,
           shake,
           camera,
@@ -507,6 +525,7 @@ export function update(state: RunState, dtRaw: number, input: InputState, viewpo
         enemies,
         particles: advancedParticles,
         projectiles,
+        enemyProjectiles,
         weaponPickups,
         shake,
         camera,
@@ -525,6 +544,7 @@ export function update(state: RunState, dtRaw: number, input: InputState, viewpo
       enemies,
       particles: advancedParticles,
       projectiles,
+      enemyProjectiles,
       weaponPickups,
       shake,
       camera,
@@ -542,6 +562,7 @@ export function chooseUpgrade(state: RunState, id: UpgradeId): RunState {
   const enemies = spawnEncounter(nextIndex);
   const player: PlayerState = {
     ...upgraded,
+    health: upgraded.stats.maxHealth,
     pos: { x: nextLevel.entryX, y: nextLevel.entryY },
     vel: { x: 0, y: 0 },
     onGround: true,
@@ -560,6 +581,7 @@ export function chooseUpgrade(state: RunState, id: UpgradeId): RunState {
     enemies,
     arenaWidth: nextLevel.arenaWidth,
     fog: createFogState(nextLevel),
+    enemyProjectiles: [],
     phase: "encounter",
   };
 }

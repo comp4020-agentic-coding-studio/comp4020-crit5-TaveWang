@@ -81,7 +81,7 @@ export interface PlayerState {
   hitEnemiesThisMelee: Set<string>;
 }
 
-export type EnemyKind = "drifter" | "sentinel" | "warden";
+export type EnemyKind = "drifter" | "sentinel" | "warden" | "wisp";
 export type EnemyState = "idle" | "patrol" | "telegraph" | "attack" | "stagger" | "dead";
 
 export interface Enemy {
@@ -126,6 +126,7 @@ export interface RunState {
   fog: FogState;
   weaponPickups: WeaponPickup[];
   projectiles: Projectile[];
+  enemyProjectiles: Projectile[];
   pendingPickup: WeaponPickup | null;
 }
 

@@ -16,6 +16,13 @@ import heroAttackUrl from "../assets/sprites/hero/attack.png?url";
 import drifterUrl from "../assets/sprites/enemies/drifter.png?url";
 import sentinelUrl from "../assets/sprites/enemies/sentinel.png?url";
 import wardenUrl from "../assets/sprites/enemies/warden.png?url";
+import wispUrl from "../assets/sprites/enemies/wisp.png?url";
+import broadswordUrl from "../assets/sprites/weapons/broadsword.png?url";
+import daggerUrl from "../assets/sprites/weapons/dagger.png?url";
+import spearUrl from "../assets/sprites/weapons/spear.png?url";
+import throwingKnivesUrl from "../assets/sprites/weapons/throwing-knives.png?url";
+import shortbowUrl from "../assets/sprites/weapons/shortbow.png?url";
+import crossbowUrl from "../assets/sprites/weapons/crossbow.png?url";
 import groundTileUrl from "../assets/sprites/tiles/ground.png?url";
 import platformTileUrl from "../assets/sprites/tiles/platform.png?url";
 import exitTileUrl from "../assets/sprites/tiles/exit.png?url";
@@ -24,7 +31,7 @@ import smokeFxUrl from "../assets/sprites/effects/smoke.png?url";
 import sparkFxUrl from "../assets/sprites/effects/spark.png?url";
 
 import { INVULN_DURATION } from "./constants";
-import type { EnemyKind, PlayerState } from "./types";
+import type { EnemyKind, PlayerState, WeaponId } from "./types";
 
 // Astro prerenders the client:load island's module graph in Node at build
 // time, where `Image`/DOM don't exist --- this module is imported (and its
@@ -43,8 +50,8 @@ function loadImage(src: string): HTMLImageElement {
 // True once the browser has actually decoded pixels --- guards every
 // `drawImage` call so a not-yet-loaded frame draws nothing instead of
 // throwing (a zero-size source rect is a hard `drawImage` error, not a no-op).
-export function isReady(image: HTMLImageElement): boolean {
-  return image.complete && image.naturalWidth > 0;
+export function isReady(image: HTMLImageElement | undefined): image is HTMLImageElement {
+  return !!image && image.complete && image.naturalWidth > 0;
 }
 
 export interface SpriteSheet {
@@ -81,7 +88,24 @@ export const ENEMY_SPRITES: Record<EnemyKind, HTMLImageElement> = {
   drifter: loadImage(drifterUrl),
   sentinel: loadImage(sentinelUrl),
   warden: loadImage(wardenUrl),
+  wisp: loadImage(wispUrl),
 };
+
+export const WEAPON_SPRITE_URLS: Record<WeaponId, string> = {
+  dagger: daggerUrl,
+  broadsword: broadswordUrl,
+  spear: spearUrl,
+  throwingKnives: throwingKnivesUrl,
+  shortbow: shortbowUrl,
+  crossbow: crossbowUrl,
+};
+
+// Every weapon has real CC0 art. Keeping this as a total Record means a newly
+// added weapon cannot silently fall back to a generic shape without causing a
+// type error here.
+export const WEAPON_SPRITES: Record<WeaponId, HTMLImageElement> = Object.fromEntries(
+  Object.entries(WEAPON_SPRITE_URLS).map(([id, url]) => [id, loadImage(url)]),
+) as Record<WeaponId, HTMLImageElement>;
 
 export const TILE_SPRITES = {
   ground: loadImage(groundTileUrl),

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { GROUND_Y } from "../src/game/constants";
 import { LEVELS, findLanding, movingPlatformPositionAt, resolveSurfaces, type MovingPlatform } from "../src/game/level";
 import { spawnEnemy, updateEnemy } from "../src/game/enemies";
 import { createInitialPlayer, createInitialRun, update } from "../src/game/run";
@@ -109,14 +110,18 @@ describe("enemy patrol-bound clamp", () => {
     expect(enemy.pos.x).toBeLessThanOrEqual(540);
   });
 
-  it("clamps final position to its patrol bounds during a committed attack lunge", () => {
+  it("during a committed attack lunge, crosses the tight patrol bound but stays within the wider aggro leash", () => {
     let enemy = spawnEnemy("sentinel", 1150, 420, 1150, 1200);
     enemy = { ...enemy, state: "attack", stateTimer: 0.3 };
     const player: PlayerState = { ...createInitialPlayer(), pos: { x: 1400, y: 420 } };
     for (let i = 0; i < 30; i++) {
       enemy = updateEnemy(enemy, player, 1 / 60, true).enemy;
     }
-    expect(enemy.pos.x).toBeLessThanOrEqual(1200);
+    // Once aggro'd, an enemy is allowed to chase past its spawn's tight
+    // patrol strip (see the "enemies chase across height tiers" behaviour) --
+    // it should cross the old patrolMaxX here, but a 400px leash still caps it.
+    expect(enemy.pos.x).toBeGreaterThan(1200);
+    expect(enemy.pos.x).toBeLessThanOrEqual(1200 + 400);
   });
 });
 
@@ -247,5 +252,45 @@ describe("enemy aggro/attack range is 2D", () => {
     }
     expect(enemy.state).not.toBe("telegraph");
     expect(enemy.state).not.toBe("attack");
+  });
+});
+
+describe("level 3 (Warden's Hall) fall-recovery climbable", () => {
+  it("lets the player climb from the ground floor back up to R1's height, so a fall no longer softlocks", () => {
+    const level3 = LEVELS[3];
+    const climbable = level3.climbables[0];
+    const midX = climbable.x + climbable.width / 2;
+
+    let state: RunState = {
+      ...createInitialRun(),
+      phase: "encounter",
+      encounterIndex: 3,
+      arenaWidth: level3.arenaWidth,
+      enemies: [],
+      player: { ...createInitialPlayer(), pos: { x: midX, y: GROUND_Y }, vel: { x: 0, y: 0 }, onGround: true },
+    };
+
+    for (let i = 0; i < 400; i++) {
+      // A single jumpPressed frame leaves the ground (jumpHeld alone never
+      // triggers a jump); once airborne and inside the climbable's column,
+      // holding jumpHeld climbs it the rest of the way.
+      const input = { ...NO_INPUT, jumpPressed: i === 0, jumpHeld: true };
+      const result = update(state, 1 / 60, input, 960);
+      state = result.state;
+    }
+
+    expect(state.player.pos.y).toBe(climbable.yTop);
+    expect(state.player.onGround).toBe(true);
+  });
+
+  it("ends directly over the arrival ledge, so releasing at the top cannot drop the player back down", () => {
+    const level3 = LEVELS[3];
+    const climbable = level3.climbables[0];
+    const midX = climbable.x + climbable.width / 2;
+    const topSurface = level3.platforms.find(
+      (platform) => platform.y === climbable.yTop && midX >= platform.x && midX <= platform.x + platform.width,
+    );
+
+    expect(topSurface).toBeDefined();
   });
 });

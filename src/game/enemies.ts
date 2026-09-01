@@ -2,13 +2,22 @@
 // (a pause with a growing warning) before it becomes dangerous, so a player
 // who reads the wind-up can always dodge it --- the "no unavoidable damage"
 // rule from the brief lives here, not in the renderer.
-import type { Enemy, EnemyKind, FacingDir, PlayerState, Rect } from "./types";
+import type { Enemy, EnemyKind, FacingDir, PlayerState, Projectile, Rect } from "./types";
 import { rectsOverlap } from "./combat";
 
 let nextId = 0;
 export function resetEnemyIds(): void {
   nextId = 0;
 }
+
+let nextEnemyProjectileId = 0;
+export function resetEnemyProjectileIds(): void {
+  nextEnemyProjectileId = 0;
+}
+
+const WISP_PROJECTILE_SPEED = 420;
+const WISP_PROJECTILE_LIFE = 1.8;
+const WISP_BOLT_COLOR = "#9a5ad1";
 
 interface EnemyTemplate {
   health: number;
@@ -32,7 +41,7 @@ const TEMPLATES: Record<EnemyKind, EnemyTemplate> = {
     contactDamage: 1,
     speed: 70,
     aggroRange: 260,
-    attackRange: 60,
+    attackRange: 110,
   },
   sentinel: {
     health: 3,
@@ -43,7 +52,7 @@ const TEMPLATES: Record<EnemyKind, EnemyTemplate> = {
     contactDamage: 1,
     speed: 110,
     aggroRange: 320,
-    attackRange: 70,
+    attackRange: 130,
   },
   warden: {
     health: 8,
@@ -54,7 +63,18 @@ const TEMPLATES: Record<EnemyKind, EnemyTemplate> = {
     contactDamage: 1,
     speed: 130,
     aggroRange: 500,
-    attackRange: 90,
+    attackRange: 160,
+  },
+  wisp: {
+    health: 2,
+    width: 28,
+    height: 28,
+    telegraphDuration: 0.6,
+    attackDuration: 0.3,
+    contactDamage: 1,
+    speed: 90,
+    aggroRange: 420,
+    attackRange: 260,
   },
 };
 
@@ -98,6 +118,7 @@ function enemyRect(enemy: Enemy): Rect {
 export interface EnemyUpdateResult {
   enemy: Enemy;
   damageToPlayer: number;
+  projectileSpawn: Projectile | null;
 }
 
 export function updateEnemy(
@@ -105,11 +126,16 @@ export function updateEnemy(
   player: PlayerState,
   dt: number,
   active: boolean,
+  levelBounds: { minY: number; maxY: number } = { minY: -Infinity, maxY: Infinity },
 ): EnemyUpdateResult {
   if (enemy.state === "dead") {
-    return { enemy: { ...enemy, deathTimer: Math.max(0, enemy.deathTimer - dt) }, damageToPlayer: 0 };
+    return {
+      enemy: { ...enemy, deathTimer: Math.max(0, enemy.deathTimer - dt) },
+      damageToPlayer: 0,
+      projectileSpawn: null,
+    };
   }
-  if (!active) return { enemy, damageToPlayer: 0 };
+  if (!active) return { enemy, damageToPlayer: 0, projectileSpawn: null };
 
   const t = TEMPLATES[enemy.kind];
   const toPlayer = player.pos.x - enemy.pos.x;
@@ -118,6 +144,7 @@ export function updateEnemy(
   let { state, stateTimer, patrolFacing } = enemy;
   let vel = { ...enemy.vel };
   let damageToPlayer = 0;
+  let projectileSpawn: Projectile | null = null;
 
   switch (state) {
     case "idle":
@@ -155,11 +182,31 @@ export function updateEnemy(
       break;
 
     case "attack": {
-      const dir: FacingDir = toPlayer >= 0 ? 1 : -1;
-      vel.x = dir * t.speed * 2.2;
-      stateTimer -= dt;
-      if (rectsOverlap(enemyRect(enemy), playerRect(player, 28, 46))) {
-        damageToPlayer = enemy.contactDamage;
+      if (enemy.kind === "wisp") {
+        // Holds position and fires a single bolt on the frame it enters
+        // "attack" --- stateTimer still equals the freshly-set duration only
+        // on that first tick, so this is a cheap "just entered" check.
+        const justEntered = stateTimer === enemy.attackDuration;
+        vel.x = 0;
+        stateTimer -= dt;
+        if (justEntered) {
+          const dir: FacingDir = toPlayer >= 0 ? 1 : -1;
+          projectileSpawn = {
+            id: `ep${nextEnemyProjectileId++}`,
+            pos: { x: enemy.pos.x, y: enemy.pos.y - enemy.height / 2 },
+            vel: { x: dir * WISP_PROJECTILE_SPEED, y: 0 },
+            damage: 1,
+            life: WISP_PROJECTILE_LIFE,
+            color: WISP_BOLT_COLOR,
+          };
+        }
+      } else {
+        const dir: FacingDir = toPlayer >= 0 ? 1 : -1;
+        vel.x = dir * t.speed * 2.2;
+        stateTimer -= dt;
+        if (rectsOverlap(enemyRect(enemy), playerRect(player, 28, 46))) {
+          damageToPlayer = enemy.contactDamage;
+        }
       }
       if (stateTimer <= 0) {
         state = "stagger";
@@ -175,13 +222,35 @@ export function updateEnemy(
       break;
   }
 
-  // Clamped in every state, not just patrol --- otherwise an aggro'd enemy
-  // on an elevated platform can walk (or lunge) straight off its own edge
-  // once levels have tiers instead of one flat room.
+  // Clamped in every state, not just patrol --- otherwise an enemy that
+  // hasn't noticed the player can walk (or lunge) straight off its own
+  // platform's edge. Once it has ever left "idle" it's aggro'd for good (the
+  // state machine never returns there), so from that point on it's allowed a
+  // soft leash beyond its spawn strip to follow the player onto adjacent
+  // platforms, instead of staying pinned to its spawn's exact edges forever.
+  const hasAggroed = state !== "idle";
+  const leash = 400;
+  const minX = hasAggroed ? enemy.patrolMinX - leash : enemy.patrolMinX;
+  const maxX = hasAggroed ? enemy.patrolMaxX + leash : enemy.patrolMaxX;
   const rawX = enemy.pos.x + vel.x * dt;
-  const pos = { x: Math.max(enemy.patrolMinX, Math.min(enemy.patrolMaxX, rawX)), y: enemy.pos.y };
+  const x = Math.max(minX, Math.min(maxX, rawX));
+
+  // Vertical movement: the hollow's wanderers have no jump animation, so
+  // rather than simulate platforming they simply drift toward a sensed
+  // presence once aggro'd, clamped to the level's bounds so they can't drift
+  // off-arena. Not aggro'd, they hold their spawn height exactly as before.
+  let y = enemy.pos.y;
+  if (hasAggroed) {
+    const dyToPlayer = player.pos.y - enemy.pos.y;
+    const maxStep = t.speed * 0.55 * dt;
+    y += Math.max(-maxStep, Math.min(maxStep, dyToPlayer));
+    y = Math.max(levelBounds.minY, Math.min(levelBounds.maxY, y));
+  }
+
+  const pos = { x, y };
   return {
     enemy: { ...enemy, pos, vel, state, stateTimer, patrolFacing },
     damageToPlayer,
+    projectileSpawn,
   };
 }

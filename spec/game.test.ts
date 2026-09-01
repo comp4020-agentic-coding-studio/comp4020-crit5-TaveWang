@@ -5,13 +5,16 @@ import {
   resolveMeleeDamage,
   resolveSlashDamage,
   spawnProjectile,
+  updateEnemyProjectiles,
   updateProjectiles,
   updateWeaponTimers,
 } from "../src/game/combat";
 import { BASE_STATS, GROUND_Y } from "../src/game/constants";
+import { spawnEnemy, updateEnemy } from "../src/game/enemies";
 import { LEVELS } from "../src/game/level";
-import { createInitialRun, resolveWeaponChoice, update } from "../src/game/run";
-import { rollWeaponDrop } from "../src/game/weapons";
+import { chooseUpgrade, createInitialRun, resolveWeaponChoice, update } from "../src/game/run";
+import { WEAPON_SPRITE_URLS } from "../src/game/sprites";
+import { rollWeaponDrop, WEAPON_POOL } from "../src/game/weapons";
 import type { Enemy, PlayerState, RunState } from "../src/game/types";
 
 const NO_INPUT = {
@@ -149,6 +152,28 @@ describe("player damage and invulnerability", () => {
     const second = applyDamageToPlayer(first, 1);
 
     expect(second.health).toBe(first.health);
+  });
+
+  it("takes only one hit's worth of damage when two enemies land contact on the same frame", () => {
+    // Regression: the cross-tier leash (see "enemies chase across height
+    // tiers") makes it common for more than one aggro'd enemy to reach the
+    // player at once. Before this was fixed, run.ts summed every enemy's
+    // damageToPlayer for the frame instead of capping it at one hit, so two
+    // simultaneous attackers could cost 2 health in a single tick even though
+    // each individually only deals contactDamage: 1.
+    const player = makePlayer({ pos: { x: 200, y: GROUND_Y }, health: 3, invulnTimer: 0 });
+    const attacker = (id: string): Enemy =>
+      makeEnemy({ id, pos: { x: 200, y: GROUND_Y }, state: "attack", stateTimer: 0.2, contactDamage: 1 });
+    const state: RunState = {
+      ...createInitialRun(),
+      phase: "encounter",
+      enemies: [attacker("a"), attacker("b")],
+      player,
+    };
+
+    const { state: next } = update(state, 1 / 60, NO_INPUT, 960);
+
+    expect(next.player.health).toBe(2);
   });
 });
 
@@ -426,6 +451,13 @@ describe("weapon pickup and swap", () => {
 });
 
 describe("weapon drop scaling", () => {
+  it("has a real sprite asset for every weapon that can drop", () => {
+    expect(Object.keys(WEAPON_SPRITE_URLS).sort()).toEqual(WEAPON_POOL.map((weapon) => weapon.id).sort());
+    for (const weapon of WEAPON_POOL) {
+      expect(WEAPON_SPRITE_URLS[weapon.id]).toMatch(/\.png/);
+    }
+  });
+
   it("never rolls a tier above min(2, levelIndex)", () => {
     for (const levelIndex of [0, 1, 2, 3]) {
       for (let i = 0; i < 200; i++) {
@@ -440,5 +472,141 @@ describe("weapon drop scaling", () => {
     for (let i = 0; i < 50; i++) {
       expect(rollWeaponDrop(0).tier).toBe(0);
     }
+  });
+});
+
+describe("full health refill on level advance", () => {
+  it("chooseUpgrade refills health to the (possibly upgraded) max, not the previous level's leftover", () => {
+    const state: RunState = {
+      ...createInitialRun(),
+      phase: "upgrade",
+      player: makePlayer({ health: 1 }),
+      upgradeChoices: ["longDash", "wideSlash"],
+    };
+
+    const next = chooseUpgrade(state, "longDash");
+
+    expect(next.player.health).toBe(next.player.stats.maxHealth);
+    expect(next.player.health).toBeGreaterThan(1);
+  });
+});
+
+describe("enemy attack range", () => {
+  it("a drifter telegraphs an attack from farther than the old close range, once aggro'd", () => {
+    let enemy = spawnEnemy("drifter", 500, GROUND_Y, 300, 700);
+    // Distance 95: beyond the old attackRange (60), within the new one (110).
+    const player = makePlayer({ pos: { x: 595, y: GROUND_Y } });
+
+    enemy = updateEnemy(enemy, player, 1 / 60, true).enemy; // idle -> patrol
+    enemy = updateEnemy(enemy, player, 1 / 60, true).enemy; // patrol -> telegraph
+
+    expect(enemy.state).toBe("telegraph");
+  });
+});
+
+describe("wisp: ranged attack", () => {
+  it("fires a projectile on the frame it enters the attack state, not the frame it leaves telegraph", () => {
+    let enemy = spawnEnemy("wisp", 500, GROUND_Y, 400, 600);
+    enemy = { ...enemy, state: "telegraph", stateTimer: 1 / 60 };
+    const player = makePlayer({ pos: { x: 700, y: GROUND_Y } });
+
+    const entering = updateEnemy(enemy, player, 1 / 60, true);
+    expect(entering.enemy.state).toBe("attack");
+    expect(entering.projectileSpawn).toBeNull();
+
+    const firing = updateEnemy(entering.enemy, player, 1 / 60, true);
+    expect(firing.projectileSpawn).not.toBeNull();
+    expect(firing.projectileSpawn!.vel.x).toBeGreaterThan(0);
+  });
+
+  it("holds its position instead of lunging while attacking", () => {
+    let enemy = spawnEnemy("wisp", 500, GROUND_Y, 400, 600);
+    enemy = { ...enemy, state: "attack", stateTimer: 0.3 };
+    const player = makePlayer({ pos: { x: 700, y: GROUND_Y } });
+
+    const result = updateEnemy(enemy, player, 1 / 60, true);
+
+    expect(result.enemy.pos.x).toBe(500);
+  });
+});
+
+describe("enemy projectiles (wisp bolts)", () => {
+  it("damages an overlapping player and removes the projectile", () => {
+    const level = LEVELS[0];
+    const player = makePlayer({ pos: { x: 240, y: GROUND_Y } });
+    const projectile = {
+      id: "ep0",
+      pos: { x: 238, y: GROUND_Y - 10 },
+      vel: { x: 600, y: 0 },
+      damage: 1,
+      life: 1,
+      color: "#9a5ad1",
+    };
+
+    const result = updateEnemyProjectiles([projectile], player, level, 1 / 60);
+
+    expect(result.damage).toBe(1);
+    expect(result.projectiles).toHaveLength(0);
+  });
+
+  it("expires once its life runs out", () => {
+    const level = LEVELS[0];
+    const player = makePlayer({ pos: { x: 900, y: GROUND_Y } });
+    const projectile = {
+      id: "ep0",
+      pos: { x: 500, y: GROUND_Y },
+      vel: { x: 0, y: 0 },
+      damage: 1,
+      life: 0.01,
+      color: "#9a5ad1",
+    };
+
+    const result = updateEnemyProjectiles([projectile], player, level, 1 / 30);
+
+    expect(result.projectiles).toHaveLength(0);
+    expect(result.damage).toBe(0);
+  });
+
+  it("stops at a wall", () => {
+    const level = LEVELS[2]; // has wall rects
+    const wall = level.walls[0];
+    const player = makePlayer({ pos: { x: 5000, y: GROUND_Y } });
+    const projectile = {
+      id: "ep0",
+      pos: { x: wall.x + wall.width / 2, y: wall.y + wall.height / 2 },
+      vel: { x: 0, y: 0 },
+      damage: 1,
+      life: 1,
+      color: "#9a5ad1",
+    };
+
+    const result = updateEnemyProjectiles([projectile], player, level, 1 / 60);
+
+    expect(result.projectiles).toHaveLength(0);
+  });
+});
+
+describe("enemies chase across height tiers once aggro'd", () => {
+  it("an aggro'd enemy's x can exceed its original patrol bound and its y drifts toward the player's", () => {
+    let enemy = spawnEnemy("sentinel", 500, 420, 460, 540);
+    const player = makePlayer({ pos: { x: 700, y: 220 } });
+    const levelBounds = { minY: -1000, maxY: 1000 };
+
+    for (let i = 0; i < 180; i++) {
+      enemy = updateEnemy(enemy, player, 1 / 60, true, levelBounds).enemy;
+    }
+
+    expect(enemy.pos.x).toBeGreaterThan(540);
+    expect(enemy.pos.y).toBeLessThan(420);
+  });
+
+  it("an idle (never-aggro'd) enemy's position is unaffected by an active update", () => {
+    const enemy = spawnEnemy("sentinel", 500, 420, 460, 540);
+    const player = makePlayer({ pos: { x: 5000, y: -5000 } }); // far outside aggroRange
+
+    const result = updateEnemy(enemy, player, 1 / 60, true);
+
+    expect(result.enemy.pos).toEqual(enemy.pos);
+    expect(result.enemy.state).toBe("idle");
   });
 });

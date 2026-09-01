@@ -21,6 +21,7 @@ import {
   ENEMY_SPRITES,
   FX_SPRITES,
   TILE_SPRITES,
+  WEAPON_SPRITES,
   drawSheetFrame,
   drawStaticSprite,
   drawTintedSprite,
@@ -42,6 +43,7 @@ const PALETTE = {
   drifter: "#6a5a8c",
   sentinel: "#4f5f8c",
   warden: "#8c4f5a",
+  wisp: "#9a5ad1",
   telegraph: "#ff5a5a",
   health: "#e8b04b",
   healthEmpty: "#332c46",
@@ -89,6 +91,7 @@ export function drawFrame(
   for (const enemy of state.enemies) drawEnemy(ctx, enemy);
   for (const pickup of state.weaponPickups) drawWeaponPickup(ctx, pickup);
   for (const projectile of state.projectiles) drawProjectile(ctx, projectile);
+  for (const projectile of state.enemyProjectiles) drawProjectile(ctx, projectile);
   drawPlayer(ctx, state.player, state.time);
   drawParticles(ctx, state.particles);
 
@@ -201,29 +204,37 @@ function drawClimbable(ctx: CanvasRenderingContext2D, climbable: Climbable, time
   ctx.restore();
 }
 
-// A weapon pickup: a triangle for melee, a diamond for ranged, in the
-// weapon's own colour, with tier pips beneath (same visual language as the
-// enemy health pips) so power is readable without any text.
+// Every weapon pickup uses its own sprite, with tier pips beneath (the same
+// visual language as enemy health) so power is readable without text. The
+// simple silhouette is retained only as a loading fallback for the first
+// frame before an image has decoded.
 function drawWeaponPickup(ctx: CanvasRenderingContext2D, pickup: WeaponPickup): void {
   const def = weaponById(pickup.weaponId);
   const x = pickup.pos.x;
   const y = pickup.pos.y - 20;
   ctx.save();
-  ctx.fillStyle = def.color;
-  ctx.beginPath();
-  if (def.slot === "melee") {
-    ctx.moveTo(x, y - 12);
-    ctx.lineTo(x + 11, y + 10);
-    ctx.lineTo(x - 11, y + 10);
-  } else {
-    ctx.moveTo(x, y - 12);
-    ctx.lineTo(x + 10, y);
-    ctx.lineTo(x, y + 12);
-    ctx.lineTo(x - 10, y);
-  }
-  ctx.closePath();
-  ctx.fill();
 
+  const sprite = WEAPON_SPRITES[pickup.weaponId];
+  if (isReady(sprite)) {
+    drawStaticSprite(ctx, sprite, x - 14, y - 14, 28, 28, false);
+  } else {
+    ctx.fillStyle = def.color;
+    ctx.beginPath();
+    if (def.slot === "melee") {
+      ctx.moveTo(x, y - 12);
+      ctx.lineTo(x + 11, y + 10);
+      ctx.lineTo(x - 11, y + 10);
+    } else {
+      ctx.moveTo(x, y - 12);
+      ctx.lineTo(x + 10, y);
+      ctx.lineTo(x, y + 12);
+      ctx.lineTo(x - 10, y);
+    }
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  ctx.fillStyle = def.color;
   for (let i = 0; i <= pickup.tier; i++) {
     ctx.fillRect(x - 9 + i * 8, y + 16, 5, 4);
   }
@@ -352,6 +363,7 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerState, time: nu
 function enemyColor(enemy: Enemy): string {
   if (enemy.kind === "drifter") return PALETTE.drifter;
   if (enemy.kind === "sentinel") return PALETTE.sentinel;
+  if (enemy.kind === "wisp") return PALETTE.wisp;
   return PALETTE.warden;
 }
 
@@ -518,21 +530,27 @@ function drawInventory(ctx: CanvasRenderingContext2D, player: PlayerState, heigh
       const def = weaponById(slot.instance.id);
       const cx = slot.x + slotSize / 2;
       const cy = y + slotSize / 2 - 3;
-      ctx.fillStyle = def.color;
-      ctx.beginPath();
-      if (def.slot === "melee") {
-        ctx.moveTo(cx, cy - 9);
-        ctx.lineTo(cx + 8, cy + 7);
-        ctx.lineTo(cx - 8, cy + 7);
+      const sprite = WEAPON_SPRITES[slot.instance.id];
+      if (isReady(sprite)) {
+        drawStaticSprite(ctx, sprite, cx - 12, cy - 12, 24, 24, false);
       } else {
-        ctx.moveTo(cx, cy - 9);
-        ctx.lineTo(cx + 8, cy);
-        ctx.lineTo(cx, cy + 9);
-        ctx.lineTo(cx - 8, cy);
+        ctx.fillStyle = def.color;
+        ctx.beginPath();
+        if (def.slot === "melee") {
+          ctx.moveTo(cx, cy - 9);
+          ctx.lineTo(cx + 8, cy + 7);
+          ctx.lineTo(cx - 8, cy + 7);
+        } else {
+          ctx.moveTo(cx, cy - 9);
+          ctx.lineTo(cx + 8, cy);
+          ctx.lineTo(cx, cy + 9);
+          ctx.lineTo(cx - 8, cy);
+        }
+        ctx.closePath();
+        ctx.fill();
       }
-      ctx.closePath();
-      ctx.fill();
 
+      ctx.fillStyle = def.color;
       for (let i = 0; i <= slot.instance.tier; i++) {
         ctx.fillRect(slot.x + 5 + i * 8, y + slotSize - 7, 5, 4);
       }

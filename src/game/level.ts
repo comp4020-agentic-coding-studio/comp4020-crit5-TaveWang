@@ -224,6 +224,7 @@ export const LEVELS: LevelDef[] = [
       { kind: "drifter", x: 1140, y: 330, patrolMinX: 1070, patrolMaxX: 1210 }, // guarding the pre-climb bonus platform
       { kind: "drifter", x: 1900, y: GROUND_Y, patrolMinX: 1830, patrolMaxX: 1970 }, // guarding the vine's base
       { kind: "drifter", x: 2220, y: -460, patrolMinX: 2170, patrolMaxX: 2290 }, // guarding the extended spur
+      { kind: "wisp", x: 2080, y: -460, patrolMinX: 2000, patrolMaxX: 2120 }, // on the spur, picks at anyone climbing up
     ],
     climbables: [
       { x: 1830, width: 140, yTop: -460, yBottom: GROUND_Y }, // vine beside the staircase, replaces the old un-jumpable mp_tower1 shuttle
@@ -271,8 +272,14 @@ export const LEVELS: LevelDef[] = [
     spawns: [
       { kind: "warden", x: 1900, y: GROUND_Y, patrolMinX: 1900, patrolMaxX: 1900 },
       { kind: "sentinel", x: 1950, y: 140, patrolMinX: 1890, patrolMaxX: 2010 }, // second front, up on R3
+      { kind: "wisp", x: 1660, y: -60, patrolMinX: 1620, patrolMaxX: 1780 }, // on R2, harasses the return climb
     ],
-    climbables: [],
+    climbables: [
+      // The recovery vine ends over R1 itself, so reaching the top always
+      // leaves the player standing on a platform instead of demanding a
+      // frame-perfect sideways jump that could drop them back into the pit.
+      { x: 1960, width: 20, yTop: -260, yBottom: GROUND_Y },
+    ],
   },
 ];
 

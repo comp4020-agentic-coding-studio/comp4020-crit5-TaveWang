@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import type { RunState, WeaponPickup } from "../game/types";
-import { createInitialRun, chooseUpgrade, resolveWeaponChoice } from "../game/run";
+import { createInitialRun, chooseUpgrade, resolveWeaponChoice, restartRun } from "../game/run";
 import { InputTracker } from "../game/input";
 import { startLoop } from "../game/loop";
 import { isMuted, playSound, setMuted, unlockAudio } from "../game/audio";
 import { UPGRADE_POOL } from "../game/upgrades";
 import { weaponById } from "../game/weapons";
+import { WEAPON_SPRITE_URLS } from "../game/sprites";
 
 // The upgrade choice is the one moment the brief allows over-canvas HTML: two
 // icon cards, no sentences. Everything else the player needs to know is
@@ -60,6 +61,14 @@ export default function GameCanvas() {
     playSound("select");
   }
 
+  function handleRetry(): void {
+    stateRef.current = restartRun();
+    setPhase(stateRef.current.phase);
+    setChoices(stateRef.current.upgradeChoices);
+    setPendingPickup(stateRef.current.pendingPickup);
+    playSound("select");
+  }
+
   function toggleMute(): void {
     unlockAudio();
     const next = !isMuted();
@@ -91,6 +100,7 @@ export default function GameCanvas() {
       </button>
       {phase === "upgrade" && (
         <div className="upgrade-overlay" role="group" aria-label="Choose an upgrade">
+          <span className="upgrade-overlay__label">Next</span>
           {choices.map((id) => {
             const def = UPGRADE_POOL.find((u) => u.id === id)!;
             return (
@@ -123,7 +133,11 @@ export default function GameCanvas() {
                 onClick={() => handleWeaponChoice(true)}
                 aria-label="Keep current weapon"
               >
-                <span className="upgrade-card__icon" />
+                <img
+                  className="upgrade-card__weapon"
+                  src={WEAPON_SPRITE_URLS[stateRef.current.player.weapons[slot]!.id]}
+                  alt=""
+                />
               </button>
               <button
                 type="button"
@@ -132,11 +146,18 @@ export default function GameCanvas() {
                 onClick={() => handleWeaponChoice(false)}
                 aria-label="Take new weapon"
               >
-                <span className="upgrade-card__icon" />
+                <img className="upgrade-card__weapon" src={WEAPON_SPRITE_URLS[pendingPickup.weaponId]} alt="" />
               </button>
             </div>
           );
         })()}
+      {phase === "defeat" && (
+        <div className="end-overlay" role="group" aria-label="You have fallen">
+          <button type="button" className="end-overlay__button" onClick={handleRetry}>
+            Retry
+          </button>
+        </div>
+      )}
     </div>
   );
 }
