@@ -186,6 +186,17 @@ in the ruin, waiting for the first press.
    `src/assets/sprites/LICENSES.md` rather than only here.
    [`332ddc9`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit5-TaveWang/commit/332ddc9)
 
+   Caught after this landed: the wall texture looked visibly messy in Level
+   2's climb section --- a stack of disjoint chunks rather than a wall. The
+   cause was `dungeon-stone-wall.png` itself: unlike the ground/platform
+   textures, it turned out to be a single decorative brick-pile graphic, not
+   a seamlessly repeatable tile, so tiling it as a `CanvasPattern` along the
+   tall, narrow wall dividers produced a visible seam every repeat. Fixed by
+   dropping the sprite for walls specifically and keeping the flat palette
+   fill that predated this pass; the unused asset and its `LICENSES.md`
+   entry were removed rather than left dead in the repo.
+   [`8957d95`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit5-TaveWang/commit/8957d95)
+
    The same commit also made Level 0 ("Threshold") and Level 2 ("Sentinel's
    Approach") bigger and more complex, since the new art needed enough space
    between encounters to actually read rather than being crammed into the
