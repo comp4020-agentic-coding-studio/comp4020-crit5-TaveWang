@@ -34,6 +34,31 @@ export interface DashState {
   originY: number;
 }
 
+export type WeaponSlot = "melee" | "ranged";
+
+export type WeaponId = "dagger" | "broadsword" | "spear" | "throwingKnives" | "shortbow" | "crossbow";
+
+export interface WeaponInstance {
+  id: WeaponId;
+  tier: number;
+}
+
+export interface WeaponPickup {
+  id: string;
+  weaponId: WeaponId;
+  tier: number;
+  pos: Vec2;
+}
+
+export interface Projectile {
+  id: string;
+  pos: Vec2;
+  vel: Vec2;
+  damage: number;
+  life: number;
+  color: string;
+}
+
 export interface PlayerState {
   pos: Vec2;
   vel: Vec2;
@@ -49,6 +74,11 @@ export interface PlayerState {
   afterimageTimer: number;
   afterimagePos: Vec2 | null;
   standingPlatformId: string | null;
+  weapons: { melee: WeaponInstance | null; ranged: WeaponInstance | null };
+  meleeCooldown: number;
+  rangedCooldown: number;
+  meleeSwingTimer: number;
+  hitEnemiesThisMelee: Set<string>;
 }
 
 export type EnemyKind = "drifter" | "sentinel" | "warden";
@@ -74,7 +104,7 @@ export interface Enemy {
   deathTimer: number;
 }
 
-export type RunPhase = "title" | "encounter" | "cleared" | "upgrade" | "victory" | "defeat";
+export type RunPhase = "title" | "encounter" | "cleared" | "upgrade" | "weaponChoice" | "victory" | "defeat";
 
 export type UpgradeId = "longDash" | "wideSlash" | "vitality" | "swiftCooldown" | "afterimage";
 
@@ -94,6 +124,9 @@ export interface RunState {
   phaseTimer: number;
   arenaWidth: number;
   fog: FogState;
+  weaponPickups: WeaponPickup[];
+  projectiles: Projectile[];
+  pendingPickup: WeaponPickup | null;
 }
 
 export interface Particle {

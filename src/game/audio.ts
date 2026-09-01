@@ -2,7 +2,17 @@
 // at call time, so there are no asset files or licences to track. Every
 // entry point is wrapped so a browser without (or blocking) AudioContext
 // leaves the game fully playable, just silent.
-export type SoundEvent = "dash" | "hit" | "playerHit" | "enemyDeath" | "select" | "victory" | "defeat";
+export type SoundEvent =
+  | "dash"
+  | "hit"
+  | "playerHit"
+  | "enemyDeath"
+  | "select"
+  | "victory"
+  | "defeat"
+  | "pickup"
+  | "meleeAttack"
+  | "rangedAttack";
 
 let ctx: AudioContext | null = null;
 let muted = false;
@@ -101,6 +111,16 @@ export function playSound(event: SoundEvent): void {
       break;
     case "defeat":
       tone(200, 0.6, "sine", 0.06, -140);
+      break;
+    case "pickup":
+      tone(500, 0.14, "sine", 0.06, 260);
+      break;
+    case "meleeAttack":
+      noiseBurst(0.05, 0.08);
+      tone(140, 0.08, "square", 0.06, -40);
+      break;
+    case "rangedAttack":
+      tone(720, 0.06, "triangle", 0.05, 140);
       break;
   }
 }

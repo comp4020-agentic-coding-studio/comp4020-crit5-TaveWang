@@ -5,19 +5,26 @@ const LEFT = new Set(["ArrowLeft", "KeyA"]);
 const RIGHT = new Set(["ArrowRight", "KeyD"]);
 const JUMP = new Set(["ArrowUp", "KeyW", "Space"]);
 const DASH = new Set(["ShiftLeft", "ShiftRight", "KeyJ", "KeyK"]);
-const ALL_KEYS = new Set([...LEFT, ...RIGHT, ...JUMP, ...DASH]);
+const MELEE = new Set(["KeyY"]);
+const RANGED = new Set(["KeyU"]);
+const ALL_KEYS = new Set([...LEFT, ...RIGHT, ...JUMP, ...DASH, ...MELEE, ...RANGED]);
 
 export interface InputState {
   left: boolean;
   right: boolean;
   jumpPressed: boolean;
+  jumpHeld: boolean;
   dashPressed: boolean;
+  meleeAttackPressed: boolean;
+  rangedAttackPressed: boolean;
 }
 
 export class InputTracker {
   private held = new Set<string>();
   private jumpQueued = false;
   private dashQueued = false;
+  private meleeQueued = false;
+  private rangedQueued = false;
   private active = true;
 
   private onKeyDown = (e: KeyboardEvent) => {
@@ -25,6 +32,8 @@ export class InputTracker {
     if (ALL_KEYS.has(e.code)) e.preventDefault();
     if (JUMP.has(e.code) && !this.held.has(e.code)) this.jumpQueued = true;
     if (DASH.has(e.code) && !this.held.has(e.code)) this.dashQueued = true;
+    if (MELEE.has(e.code) && !this.held.has(e.code)) this.meleeQueued = true;
+    if (RANGED.has(e.code) && !this.held.has(e.code)) this.rangedQueued = true;
     this.held.add(e.code);
   };
 
@@ -53,15 +62,22 @@ export class InputTracker {
     if (!active) this.held.clear();
   }
 
-  // Consumes the one-shot "just pressed" flags for jump/dash so a held key
-  // doesn't retrigger every frame.
+  // Consumes the one-shot "just pressed" flags for jump/dash/melee/ranged so
+  // a held key doesn't retrigger every frame. jumpHeld stays continuous
+  // (like left/right) since the vine-climb needs to know the key is still
+  // down, not just that it was pressed this frame.
   poll(): InputState {
     const left = [...LEFT].some((k) => this.held.has(k));
     const right = [...RIGHT].some((k) => this.held.has(k));
+    const jumpHeld = [...JUMP].some((k) => this.held.has(k));
     const jumpPressed = this.jumpQueued;
     const dashPressed = this.dashQueued;
+    const meleeAttackPressed = this.meleeQueued;
+    const rangedAttackPressed = this.rangedQueued;
     this.jumpQueued = false;
     this.dashQueued = false;
-    return { left, right, jumpPressed, dashPressed };
+    this.meleeQueued = false;
+    this.rangedQueued = false;
+    return { left, right, jumpPressed, jumpHeld, dashPressed, meleeAttackPressed, rangedAttackPressed };
   }
 }

@@ -5,7 +5,15 @@ import { createInitialRun, chooseUpgrade, update } from "../src/game/run";
 import type { InputState } from "../src/game/input";
 import type { RunState } from "../src/game/types";
 
-const NO_INPUT: InputState = { left: false, right: false, jumpPressed: false, dashPressed: false };
+const NO_INPUT: InputState = {
+  left: false,
+  right: false,
+  jumpPressed: false,
+  jumpHeld: false,
+  dashPressed: false,
+  meleeAttackPressed: false,
+  rangedAttackPressed: false,
+};
 
 describe("createFogState", () => {
   it("sizes the grid from the level's world bounds", () => {

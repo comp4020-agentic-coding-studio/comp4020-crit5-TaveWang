@@ -2,12 +2,14 @@
 // src/assets/sprites/LICENSES.md for sources); particles, the HUD, and every
 // gameplay-feedback overlay (telegraph outlines, stagger flash, health pips,
 // the dash-ready gauge) stay plain Canvas 2D primitives, same as before.
-import type { Enemy, PlayerState, RunState } from "./types";
-import { getSlashHitbox } from "./combat";
+import type { Enemy, PlayerState, Projectile, RunState, WeaponPickup } from "./types";
+import { getMeleeHitbox, getSlashHitbox } from "./combat";
+import { weaponById } from "./weapons";
 import {
   LEVELS,
   exitRect,
   movingPlatformPositionAt,
+  type Climbable,
   type GroundSegment,
   type Hazard,
   type LevelDef,
@@ -51,6 +53,7 @@ const PALETTE = {
   fogSeenAir: "rgba(207, 201, 222, 0.06)",
   minimapPanel: "rgba(13, 12, 20, 0.72)",
   minimapBorder: "rgba(207, 201, 222, 0.25)",
+  vine: "#5a7a5a",
 };
 
 export function drawFrame(
@@ -81,8 +84,11 @@ export function drawFrame(
     drawPlatform(ctx, { x: p.x, width: mp.width, y: p.y });
   }
   for (const hazard of level.hazards) drawHazard(ctx, hazard);
+  for (const climbable of level.climbables) drawClimbable(ctx, climbable, state.time);
   drawExit(ctx, level, state.phase === "cleared", state.time);
   for (const enemy of state.enemies) drawEnemy(ctx, enemy);
+  for (const pickup of state.weaponPickups) drawWeaponPickup(ctx, pickup);
+  for (const projectile of state.projectiles) drawProjectile(ctx, projectile);
   drawPlayer(ctx, state.player, state.time);
   drawParticles(ctx, state.particles);
 
@@ -168,6 +174,73 @@ function drawHazard(ctx: CanvasRenderingContext2D, hazard: Hazard): void {
   ctx.closePath();
   ctx.fill();
   ctx.globalAlpha = 1;
+}
+
+// A vine: a wavy line with a few rung marks, drawn down its climbable band.
+// Reads as a route to hold onto, not another platform to time a jump for.
+function drawClimbable(ctx: CanvasRenderingContext2D, climbable: Climbable, time: number): void {
+  const cx = climbable.x + climbable.width / 2;
+  ctx.save();
+  ctx.strokeStyle = PALETTE.vine;
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  const sway = 6;
+  const step = 18;
+  for (let y = climbable.yTop; y <= climbable.yBottom; y += step) {
+    const x = cx + Math.sin(y * 0.05 + time * 0.6) * sway;
+    if (y === climbable.yTop) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  ctx.fillStyle = PALETTE.vine;
+  for (let y = climbable.yTop + step; y < climbable.yBottom; y += step * 2) {
+    const x = cx + Math.sin(y * 0.05 + time * 0.6) * sway;
+    ctx.fillRect(x - 8, y - 2, 16, 4);
+  }
+  ctx.restore();
+}
+
+// A weapon pickup: a triangle for melee, a diamond for ranged, in the
+// weapon's own colour, with tier pips beneath (same visual language as the
+// enemy health pips) so power is readable without any text.
+function drawWeaponPickup(ctx: CanvasRenderingContext2D, pickup: WeaponPickup): void {
+  const def = weaponById(pickup.weaponId);
+  const x = pickup.pos.x;
+  const y = pickup.pos.y - 20;
+  ctx.save();
+  ctx.fillStyle = def.color;
+  ctx.beginPath();
+  if (def.slot === "melee") {
+    ctx.moveTo(x, y - 12);
+    ctx.lineTo(x + 11, y + 10);
+    ctx.lineTo(x - 11, y + 10);
+  } else {
+    ctx.moveTo(x, y - 12);
+    ctx.lineTo(x + 10, y);
+    ctx.lineTo(x, y + 12);
+    ctx.lineTo(x - 10, y);
+  }
+  ctx.closePath();
+  ctx.fill();
+
+  for (let i = 0; i <= pickup.tier; i++) {
+    ctx.fillRect(x - 9 + i * 8, y + 16, 5, 4);
+  }
+  ctx.restore();
+}
+
+function drawProjectile(ctx: CanvasRenderingContext2D, projectile: Projectile): void {
+  const angle = Math.atan2(projectile.vel.y, projectile.vel.x);
+  const len = 16;
+  ctx.save();
+  ctx.strokeStyle = projectile.color;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(projectile.pos.x - Math.cos(angle) * len, projectile.pos.y - Math.sin(angle) * len);
+  ctx.lineTo(projectile.pos.x, projectile.pos.y);
+  ctx.stroke();
+  ctx.restore();
 }
 
 // The exit is always visible so its state change is the only "you can leave
@@ -257,6 +330,20 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerState, time: nu
       ctx.lineWidth = 2;
       ctx.stroke();
     }
+  }
+
+  const melee = getMeleeHitbox(player);
+  if (melee && player.weapons.melee) {
+    const color = weaponById(player.weapons.melee.id).color;
+    ctx.fillStyle = color;
+    ctx.globalAlpha = 0.5;
+    ctx.beginPath();
+    ctx.roundRect(melee.x, melee.y, melee.w, melee.h, 8);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.stroke();
   }
 
   ctx.globalAlpha = 1;
@@ -389,6 +476,69 @@ function drawHud(ctx: CanvasRenderingContext2D, state: RunState, width: number, 
   ctx.stroke();
 
   drawMinimap(ctx, state, width, height);
+  drawInventory(ctx, player, height);
+}
+
+// Bottom-left, two fixed slots: left is always melee (Y), right is always
+// ranged (U) --- the keybind is conveyed purely by which slot is on which
+// side, never by a label, matching the no-on-screen-text rule everywhere
+// else in the HUD.
+function drawInventory(ctx: CanvasRenderingContext2D, player: PlayerState, height: number): void {
+  const slotSize = 40;
+  const gap = 8;
+  const pad = 8;
+  const panelW = slotSize * 2 + gap + pad * 2;
+  const panelH = slotSize + pad * 2;
+  const panelX = 14;
+  const panelY = height - panelH - 14;
+
+  ctx.save();
+  ctx.fillStyle = PALETTE.minimapPanel;
+  ctx.beginPath();
+  ctx.roundRect(panelX, panelY, panelW, panelH, 6);
+  ctx.fill();
+  ctx.strokeStyle = PALETTE.minimapBorder;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  const slots: Array<{ instance: typeof player.weapons.melee; x: number }> = [
+    { instance: player.weapons.melee, x: panelX + pad },
+    { instance: player.weapons.ranged, x: panelX + pad + slotSize + gap },
+  ];
+
+  for (const slot of slots) {
+    const y = panelY + pad;
+    ctx.strokeStyle = PALETTE.minimapBorder;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(slot.x, y, slotSize, slotSize, 5);
+    ctx.stroke();
+
+    if (slot.instance) {
+      const def = weaponById(slot.instance.id);
+      const cx = slot.x + slotSize / 2;
+      const cy = y + slotSize / 2 - 3;
+      ctx.fillStyle = def.color;
+      ctx.beginPath();
+      if (def.slot === "melee") {
+        ctx.moveTo(cx, cy - 9);
+        ctx.lineTo(cx + 8, cy + 7);
+        ctx.lineTo(cx - 8, cy + 7);
+      } else {
+        ctx.moveTo(cx, cy - 9);
+        ctx.lineTo(cx + 8, cy);
+        ctx.lineTo(cx, cy + 9);
+        ctx.lineTo(cx - 8, cy);
+      }
+      ctx.closePath();
+      ctx.fill();
+
+      for (let i = 0; i <= slot.instance.tier; i++) {
+        ctx.fillRect(slot.x + 5 + i * 8, y + slotSize - 7, 5, 4);
+      }
+    }
+  }
+  ctx.restore();
 }
 
 // A small fog-of-war map, bottom-right: the level's terrain is only drawn

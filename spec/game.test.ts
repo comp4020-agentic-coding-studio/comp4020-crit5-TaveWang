@@ -1,11 +1,28 @@
 import { describe, expect, it } from "vitest";
-import { applyDamageToPlayer, checkPlayerRunEnd, resolveSlashDamage } from "../src/game/combat";
+import {
+  applyDamageToPlayer,
+  checkPlayerRunEnd,
+  resolveMeleeDamage,
+  resolveSlashDamage,
+  spawnProjectile,
+  updateProjectiles,
+  updateWeaponTimers,
+} from "../src/game/combat";
 import { BASE_STATS, GROUND_Y } from "../src/game/constants";
 import { LEVELS } from "../src/game/level";
-import { createInitialRun, update } from "../src/game/run";
+import { createInitialRun, resolveWeaponChoice, update } from "../src/game/run";
+import { rollWeaponDrop } from "../src/game/weapons";
 import type { Enemy, PlayerState, RunState } from "../src/game/types";
 
-const NO_INPUT = { left: false, right: false, jumpPressed: false, dashPressed: false };
+const NO_INPUT = {
+  left: false,
+  right: false,
+  jumpPressed: false,
+  jumpHeld: false,
+  dashPressed: false,
+  meleeAttackPressed: false,
+  rangedAttackPressed: false,
+};
 
 // These exercise the dash-slash rule directly against the pure game-logic
 // layer --- no canvas, no DOM, matching the crit-5 brief's requirement that
@@ -27,6 +44,11 @@ function makePlayer(overrides: Partial<PlayerState> = {}): PlayerState {
     afterimageTimer: 0,
     afterimagePos: null,
     standingPlatformId: null,
+    weapons: { melee: null, ranged: null },
+    meleeCooldown: 0,
+    rangedCooldown: 0,
+    meleeSwingTimer: 0,
+    hitEnemiesThisMelee: new Set(),
     ...overrides,
   };
 }
@@ -193,5 +215,230 @@ describe("run end condition", () => {
   it("ends the run when health reaches zero", () => {
     const player = makePlayer({ health: 0 });
     expect(checkPlayerRunEnd(player)).toBe("defeat");
+  });
+});
+
+describe("melee weapon: hit detection", () => {
+  it("damages an enemy inside the swing box while the swing is active", () => {
+    const player = makePlayer({
+      dash: { active: false, timer: 0, cooldownTimer: 0, dir: 1, originY: GROUND_Y },
+      weapons: { melee: { id: "dagger", tier: 0 }, ranged: null },
+      meleeSwingTimer: 0.1,
+    });
+    const enemy = makeEnemy({ pos: { x: 230, y: GROUND_Y } });
+
+    const { enemies, hitIds } = resolveMeleeDamage(player, [enemy]);
+
+    expect(hitIds).toContain(enemy.id);
+    expect(enemies[0].health).toBe(enemy.health - 1);
+  });
+
+  it("does not damage anything without a melee weapon equipped", () => {
+    const player = makePlayer({
+      dash: { active: false, timer: 0, cooldownTimer: 0, dir: 1, originY: GROUND_Y },
+      weapons: { melee: null, ranged: null },
+      meleeSwingTimer: 0.1,
+    });
+    const enemy = makeEnemy({ pos: { x: 230, y: GROUND_Y } });
+
+    const { hitIds } = resolveMeleeDamage(player, [enemy]);
+
+    expect(hitIds).toHaveLength(0);
+  });
+
+  it("does not damage anything once the swing window has ended", () => {
+    const player = makePlayer({
+      dash: { active: false, timer: 0, cooldownTimer: 0, dir: 1, originY: GROUND_Y },
+      weapons: { melee: { id: "dagger", tier: 0 }, ranged: null },
+      meleeSwingTimer: 0,
+    });
+    const enemy = makeEnemy({ pos: { x: 230, y: GROUND_Y } });
+
+    const { hitIds } = resolveMeleeDamage(player, [enemy]);
+
+    expect(hitIds).toHaveLength(0);
+  });
+
+  it("hits an enemy at most once per swing, even across repeated frames", () => {
+    const player = makePlayer({
+      dash: { active: false, timer: 0, cooldownTimer: 0, dir: 1, originY: GROUND_Y },
+      weapons: { melee: { id: "dagger", tier: 0 }, ranged: null },
+      meleeSwingTimer: 0.1,
+    });
+    const enemy = makeEnemy({ pos: { x: 230, y: GROUND_Y } });
+    let enemies = [enemy];
+
+    const first = resolveMeleeDamage(player, enemies);
+    enemies = first.enemies;
+    const second = resolveMeleeDamage(player, enemies);
+
+    expect(first.hitIds).toContain(enemy.id);
+    expect(second.hitIds).not.toContain(enemy.id);
+  });
+});
+
+describe("ranged weapon: projectiles", () => {
+  it("does not fire without a ranged weapon equipped", () => {
+    const player = makePlayer({ weapons: { melee: null, ranged: null } });
+    expect(spawnProjectile(player)).toBeNull();
+  });
+
+  it("fires in the direction the player is facing", () => {
+    const player = makePlayer({ weapons: { melee: null, ranged: { id: "shortbow", tier: 0 } }, facing: -1 });
+    const fired = spawnProjectile(player);
+    expect(fired).not.toBeNull();
+    expect(fired!.projectile.vel.x).toBeLessThan(0);
+  });
+
+  it("damages an overlapping enemy and removes the projectile", () => {
+    const level = LEVELS[0];
+    const enemy = makeEnemy({ pos: { x: 240, y: GROUND_Y } });
+    const projectile = { id: "p0", pos: { x: 238, y: GROUND_Y - 10 }, vel: { x: 600, y: 0 }, damage: 1, life: 1, color: "#fff" };
+
+    const result = updateProjectiles([projectile], [enemy], level, 1 / 60);
+
+    expect(result.hitIds).toContain(enemy.id);
+    expect(result.projectiles).toHaveLength(0);
+    expect(result.enemies[0].health).toBe(enemy.health - 1);
+  });
+
+  it("ignores already-dead enemies", () => {
+    const level = LEVELS[0];
+    const enemy = makeEnemy({ pos: { x: 240, y: GROUND_Y }, state: "dead" });
+    const projectile = { id: "p0", pos: { x: 238, y: GROUND_Y - 10 }, vel: { x: 600, y: 0 }, damage: 1, life: 1, color: "#fff" };
+
+    const result = updateProjectiles([projectile], [enemy], level, 1 / 60);
+
+    expect(result.hitIds).toHaveLength(0);
+    expect(result.projectiles).toHaveLength(1);
+  });
+
+  it("expires once its life runs out", () => {
+    const level = LEVELS[0];
+    const projectile = { id: "p0", pos: { x: 500, y: GROUND_Y }, vel: { x: 0, y: 0 }, damage: 1, life: 0.01, color: "#fff" };
+
+    const result = updateProjectiles([projectile], [], level, 1 / 30);
+
+    expect(result.projectiles).toHaveLength(0);
+  });
+
+  it("stops at a wall", () => {
+    const level = LEVELS[2]; // has wall rects
+    const wall = level.walls[0];
+    const projectile = {
+      id: "p0",
+      pos: { x: wall.x + wall.width / 2, y: wall.y + wall.height / 2 },
+      vel: { x: 0, y: 0 },
+      damage: 1,
+      life: 1,
+      color: "#fff",
+    };
+
+    const result = updateProjectiles([projectile], [], level, 1 / 60);
+
+    expect(result.projectiles).toHaveLength(0);
+  });
+});
+
+describe("weapon timers", () => {
+  it("clears the per-swing hit memory once the swing window ends", () => {
+    const player = makePlayer({
+      weapons: { melee: { id: "dagger", tier: 0 }, ranged: null },
+      meleeSwingTimer: 0.001,
+      hitEnemiesThisMelee: new Set(["test-enemy"]),
+    });
+
+    const next = updateWeaponTimers(player, 1 / 30);
+
+    expect(next.meleeSwingTimer).toBe(0);
+    expect(next.hitEnemiesThisMelee.size).toBe(0);
+  });
+});
+
+describe("weapon pickup and swap", () => {
+  const stillDash = { active: false, timer: 0, cooldownTimer: 0, dir: 1 as const, originY: GROUND_Y };
+
+  it("auto-equips a weapon pickup into an empty matching slot", () => {
+    const state: RunState = {
+      ...createInitialRun(),
+      phase: "encounter",
+      enemies: [],
+      weaponPickups: [{ id: "wp-1", weaponId: "dagger", tier: 0, pos: { x: 200, y: GROUND_Y } }],
+      player: makePlayer({ pos: { x: 200, y: GROUND_Y }, dash: stillDash }),
+    };
+
+    const { state: next } = update(state, 1 / 60, NO_INPUT, 960);
+
+    expect(next.player.weapons.melee?.id).toBe("dagger");
+    expect(next.weaponPickups).toHaveLength(0);
+    expect(next.phase).not.toBe("weaponChoice");
+  });
+
+  it("raises a weaponChoice prompt instead of overwriting an occupied slot", () => {
+    const state: RunState = {
+      ...createInitialRun(),
+      phase: "encounter",
+      enemies: [],
+      weaponPickups: [{ id: "wp-1", weaponId: "broadsword", tier: 1, pos: { x: 200, y: GROUND_Y } }],
+      player: makePlayer({
+        pos: { x: 200, y: GROUND_Y },
+        dash: stillDash,
+        weapons: { melee: { id: "dagger", tier: 0 }, ranged: null },
+      }),
+    };
+
+    const { state: next } = update(state, 1 / 60, NO_INPUT, 960);
+
+    expect(next.phase).toBe("weaponChoice");
+    expect(next.pendingPickup?.weaponId).toBe("broadsword");
+    expect(next.player.weapons.melee?.id).toBe("dagger"); // unchanged until resolved
+  });
+
+  it("resolveWeaponChoice(true) keeps the current weapon", () => {
+    const state: RunState = {
+      ...createInitialRun(),
+      phase: "weaponChoice",
+      pendingPickup: { id: "wp-1", weaponId: "broadsword", tier: 1, pos: { x: 200, y: GROUND_Y } },
+      player: makePlayer({ weapons: { melee: { id: "dagger", tier: 0 }, ranged: null } }),
+    };
+
+    const next = resolveWeaponChoice(state, true);
+
+    expect(next.player.weapons.melee?.id).toBe("dagger");
+    expect(next.pendingPickup).toBeNull();
+    expect(next.phase).toBe("encounter");
+  });
+
+  it("resolveWeaponChoice(false) takes the new weapon", () => {
+    const state: RunState = {
+      ...createInitialRun(),
+      phase: "weaponChoice",
+      pendingPickup: { id: "wp-1", weaponId: "broadsword", tier: 1, pos: { x: 200, y: GROUND_Y } },
+      player: makePlayer({ weapons: { melee: { id: "dagger", tier: 0 }, ranged: null } }),
+    };
+
+    const next = resolveWeaponChoice(state, false);
+
+    expect(next.player.weapons.melee).toEqual({ id: "broadsword", tier: 1 });
+    expect(next.pendingPickup).toBeNull();
+    expect(next.phase).toBe("encounter");
+  });
+});
+
+describe("weapon drop scaling", () => {
+  it("never rolls a tier above min(2, levelIndex)", () => {
+    for (const levelIndex of [0, 1, 2, 3]) {
+      for (let i = 0; i < 200; i++) {
+        const { tier } = rollWeaponDrop(levelIndex);
+        expect(tier).toBeLessThanOrEqual(Math.min(2, levelIndex));
+        expect(tier).toBeGreaterThanOrEqual(0);
+      }
+    }
+  });
+
+  it("always rolls tier 0 on the first level", () => {
+    for (let i = 0; i < 50; i++) {
+      expect(rollWeaponDrop(0).tier).toBe(0);
+    }
   });
 });

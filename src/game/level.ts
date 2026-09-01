@@ -44,6 +44,13 @@ export interface WallRect {
   height: number;
 }
 
+export interface Climbable {
+  x: number;
+  width: number;
+  yTop: number;
+  yBottom: number;
+}
+
 export interface LevelSpawn {
   kind: EnemyKind;
   x: number;
@@ -68,6 +75,7 @@ export interface LevelDef {
   hazards: Hazard[];
   walls: WallRect[];
   spawns: LevelSpawn[];
+  climbables: Climbable[];
 }
 
 const GROUND_Y = 420;
@@ -105,6 +113,7 @@ export const LEVELS: LevelDef[] = [
       { kind: "drifter", x: 1150, y: GROUND_Y, patrolMinX: 1000, patrolMaxX: 1300 },
       { kind: "drifter", x: 1680, y: GROUND_Y, patrolMinX: 1550, patrolMaxX: 1800 },
     ],
+    climbables: [],
   },
   {
     // "Two Tiers" -> descending fork + dead-end: past the entry gap, a
@@ -155,6 +164,7 @@ export const LEVELS: LevelDef[] = [
       { kind: "drifter", x: 900, y: 920, patrolMinX: 780, patrolMaxX: 980 }, // on corridor, post-reconnect
       { kind: "drifter", x: 1080, y: 330, patrolMinX: 1030, patrolMaxX: 1150 }, // guarding the dead-end alcove
     ],
+    climbables: [],
   },
   {
     // "Sentinel's Approach" -> unchanged gated gap + mp1 shuttle, then a
@@ -197,16 +207,6 @@ export const LEVELS: LevelDef[] = [
         period: 3.4,
         phase: 0,
       },
-      {
-        id: "mp_tower1",
-        width: 140,
-        baseX: 1900,
-        amplitudeX: 0,
-        baseY: -20,
-        amplitudeY: 440,
-        period: 4.6,
-        phase: 0,
-      },
     ],
     hazards: [
       { x: 1240, width: 60, height: 24, y: GROUND_Y },
@@ -222,8 +222,11 @@ export const LEVELS: LevelDef[] = [
       { kind: "sentinel", x: 1450, y: -460, patrolMinX: 1320, patrolMaxX: 1650 },
       { kind: "drifter", x: 1700, y: -460, patrolMinX: 1600, patrolMaxX: 1800 },
       { kind: "drifter", x: 1140, y: 330, patrolMinX: 1070, patrolMaxX: 1210 }, // guarding the pre-climb bonus platform
-      { kind: "drifter", x: 1900, y: GROUND_Y, patrolMinX: 1830, patrolMaxX: 1970 }, // guarding the elevator's boarding point
+      { kind: "drifter", x: 1900, y: GROUND_Y, patrolMinX: 1830, patrolMaxX: 1970 }, // guarding the vine's base
       { kind: "drifter", x: 2220, y: -460, patrolMinX: 2170, patrolMaxX: 2290 }, // guarding the extended spur
+    ],
+    climbables: [
+      { x: 1830, width: 140, yTop: -460, yBottom: GROUND_Y }, // vine beside the staircase, replaces the old un-jumpable mp_tower1 shuttle
     ],
   },
   {
@@ -269,6 +272,7 @@ export const LEVELS: LevelDef[] = [
       { kind: "warden", x: 1900, y: GROUND_Y, patrolMinX: 1900, patrolMaxX: 1900 },
       { kind: "sentinel", x: 1950, y: 140, patrolMinX: 1890, patrolMaxX: 2010 }, // second front, up on R3
     ],
+    climbables: [],
   },
 ];
 

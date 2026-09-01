@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import type { RunState } from "../game/types";
-import { createInitialRun, chooseUpgrade } from "../game/run";
+import type { RunState, WeaponPickup } from "../game/types";
+import { createInitialRun, chooseUpgrade, resolveWeaponChoice } from "../game/run";
 import { InputTracker } from "../game/input";
 import { startLoop } from "../game/loop";
 import { isMuted, playSound, setMuted, unlockAudio } from "../game/audio";
 import { UPGRADE_POOL } from "../game/upgrades";
+import { weaponById } from "../game/weapons";
 
 // The upgrade choice is the one moment the brief allows over-canvas HTML: two
 // icon cards, no sentences. Everything else the player needs to know is
@@ -15,6 +16,7 @@ export default function GameCanvas() {
   const stateRef = useRef<RunState>(createInitialRun());
   const [phase, setPhase] = useState(stateRef.current.phase);
   const [choices, setChoices] = useState(stateRef.current.upgradeChoices);
+  const [pendingPickup, setPendingPickup] = useState<WeaponPickup | null>(stateRef.current.pendingPickup);
   const [muted, setMutedState] = useState(false);
 
   useEffect(() => {
@@ -34,6 +36,7 @@ export default function GameCanvas() {
           lastPhase = next.phase;
           setPhase(next.phase);
           setChoices(next.upgradeChoices);
+          setPendingPickup(next.pendingPickup);
         }
       },
     );
@@ -47,6 +50,13 @@ export default function GameCanvas() {
   function handleUpgrade(id: (typeof UPGRADE_POOL)[number]["id"]): void {
     stateRef.current = chooseUpgrade(stateRef.current, id);
     setPhase(stateRef.current.phase);
+    playSound("select");
+  }
+
+  function handleWeaponChoice(keepCurrent: boolean): void {
+    stateRef.current = resolveWeaponChoice(stateRef.current, keepCurrent);
+    setPhase(stateRef.current.phase);
+    setPendingPickup(stateRef.current.pendingPickup);
     playSound("select");
   }
 
@@ -98,6 +108,35 @@ export default function GameCanvas() {
           })}
         </div>
       )}
+      {phase === "weaponChoice" &&
+        pendingPickup &&
+        (() => {
+          const slot = weaponById(pendingPickup.weaponId).slot;
+          const currentColor = weaponById(stateRef.current.player.weapons[slot]!.id).color;
+          const newColor = weaponById(pendingPickup.weaponId).color;
+          return (
+            <div className="upgrade-overlay" role="group" aria-label="Choose a weapon">
+              <button
+                type="button"
+                className="upgrade-card"
+                style={{ ["--upgrade-color" as string]: currentColor }}
+                onClick={() => handleWeaponChoice(true)}
+                aria-label="Keep current weapon"
+              >
+                <span className="upgrade-card__icon" />
+              </button>
+              <button
+                type="button"
+                className="upgrade-card"
+                style={{ ["--upgrade-color" as string]: newColor }}
+                onClick={() => handleWeaponChoice(false)}
+                aria-label="Take new weapon"
+              >
+                <span className="upgrade-card__icon" />
+              </button>
+            </div>
+          );
+        })()}
     </div>
   );
 }

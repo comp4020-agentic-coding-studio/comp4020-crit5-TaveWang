@@ -4,7 +4,15 @@ import { spawnEnemy, updateEnemy } from "../src/game/enemies";
 import { createInitialPlayer, createInitialRun, update } from "../src/game/run";
 import type { PlayerState, RunState } from "../src/game/types";
 
-const NO_INPUT = { left: false, right: false, jumpPressed: false, dashPressed: false };
+const NO_INPUT = {
+  left: false,
+  right: false,
+  jumpPressed: false,
+  jumpHeld: false,
+  dashPressed: false,
+  meleeAttackPressed: false,
+  rangedAttackPressed: false,
+};
 
 // Level geometry is plain data, and the collision/landing helpers are pure
 // functions over it --- exercised here the same way the dash-slash rule is,
@@ -180,7 +188,54 @@ describe("level structure", () => {
       expect(onGround || onPlatform).toBe(true);
     });
 
+    it(`${level.name}: every climbable's base connects to real ground or a platform`, () => {
+      for (const climbable of level.climbables) {
+        const midX = climbable.x + climbable.width / 2;
+        const surfaceAt = (y: number) =>
+          level.groundSegments.some((g) => y === g.y && midX >= g.x && midX <= g.x + g.width) ||
+          level.platforms.some((p) => y === p.y && midX >= p.x && midX <= p.x + p.width);
+        expect(surfaceAt(climbable.yBottom)).toBe(true);
+      }
+    });
+
   }
+});
+
+describe("climbing", () => {
+  const level2 = LEVELS[2];
+  const climbable = level2.climbables[0];
+  const midX = climbable.x + climbable.width / 2;
+  const startY = climbable.yTop + (climbable.yBottom - climbable.yTop) / 2;
+
+  function makeClimbState(): RunState {
+    return {
+      ...createInitialRun(),
+      phase: "encounter",
+      encounterIndex: 2,
+      arenaWidth: level2.arenaWidth,
+      enemies: [],
+      player: { ...createInitialPlayer(), pos: { x: midX, y: startY }, vel: { x: 0, y: 0 }, onGround: false },
+    };
+  }
+
+  it("climbs upward while jump is held on a climbable", () => {
+    const { state: next } = update(makeClimbState(), 1 / 30, { ...NO_INPUT, jumpHeld: true }, 960);
+    expect(next.player.pos.y).toBeLessThan(startY);
+  });
+
+  it("slides down slowly on a climbable when jump is not held", () => {
+    const { state: next } = update(makeClimbState(), 1 / 30, NO_INPUT, 960);
+    const dy = next.player.pos.y - startY;
+    expect(dy).toBeGreaterThan(0);
+    expect(dy).toBeLessThan(10); // slow slide, not full-gravity free-fall
+  });
+});
+
+describe("level 2 moving platforms", () => {
+  it("no longer includes the un-jumpable mp_tower1 platform", () => {
+    const level2 = LEVELS[2];
+    expect(level2.movingPlatforms.some((mp) => mp.id === "mp_tower1")).toBe(false);
+  });
 });
 
 describe("enemy aggro/attack range is 2D", () => {

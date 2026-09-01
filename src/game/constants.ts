@@ -38,3 +38,11 @@ export const AFTERIMAGE_DAMAGE = 1;
 export const HIT_PAUSE_DURATION = 0.06;
 export const SHAKE_ON_HIT = 6;
 export const SHAKE_ON_PLAYER_HIT = 9;
+
+// Vine climbing: held jump ascends briskly, releasing it slides down slowly
+// rather than free-falling, so the vine reads as a controllable route rather
+// than another platform to time.
+export const CLIMB_SPEED = 220;
+export const CLIMB_SLIDE_SPEED = 70;
+
+export const MELEE_HITBOX_HEIGHT = 50;
