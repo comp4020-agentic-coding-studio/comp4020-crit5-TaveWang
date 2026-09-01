@@ -234,11 +234,11 @@ in the ruin, waiting for the first press.
 
    The inventory panel (`drawInventory`, `src/game/render.ts`) stays inside
    the no-tutorial-text constraint the same way the dash ring and health
-   pips already do: two fixed slots, each a coloured glyph (triangle for
-   melee, diamond for ranged) with tier pips underneath, no text and no key
-   glyphs anywhere --- which key controls which slot is conveyed purely by
-   the slots' fixed left/right screen position (Y sits left of U on a
-   QWERTY row, so melee is always the left slot).
+   pips already do: two fixed slots, each showing its weapon icon with tier
+   pips underneath, no text and no key glyphs anywhere --- which key controls
+   which slot is conveyed purely by the slots' fixed left/right screen
+   position (Y sits left of U on a QWERTY row, so melee is always the left
+   slot).
 
    The unrelated but overdue fix: Level 2's `mp_tower1` moving platform
    travelled continuously between `y: -460` and `y: 420` with no turnaround
@@ -254,6 +254,30 @@ in the ruin, waiting for the first press.
    or bottom, at which point gravity and the ordinary one-way-landing check
    take back over.
    [`0c8e703`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit5-TaveWang/commit/0c8e703)
+
+9. **The final combat-and-progression pass closed the remaining dead ends.**
+   A direct playability review asked for six concrete changes together:
+   real art for every dropped weapon, a full heal between levels, visible
+   `Next`/`Retry` copy, earlier enemy attacks, a recovery route after falling
+   in the boss room, and enemies that can threaten the player across tiers.
+   The resulting pass deliberately reused existing seams rather than adding
+   parallel systems: `chooseUpgrade` owns the between-level heal; the existing
+   upgrade and defeat overlays own the two labels; `EnemyTemplate` owns wider
+   attack ranges; and `updateEnemy` now gives an aggroed enemy a soft horizontal
+   leash plus bounded vertical pursuit. A new `wisp` enemy uses the same
+   telegraph/state machine but fires a wall-blocked projectile rather than
+   lunging, so its extra difficulty still preserves readable wind-up.
+
+   The boss room's recovery vine now ends directly over the arrival ledge,
+   turning the former fall-and-never-return state into a deterministic climb
+   back to the exit. All six entries in `WEAPON_POOL` are mapped by a total
+   `Record<WeaponId, ...>` to real CC0 sprites; a regression test compares the
+   mapping against the pool so a future weapon cannot silently fall back to a
+   triangle or diamond. The same pass also capped simultaneous enemy, hazard,
+   and projectile contact to one damage event per frame, preserving the
+   intended hit-then-invulnerability rhythm now that enemies can converge from
+   multiple tiers.
+   [`9cc9a66`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit5-TaveWang/commit/9cc9a66)
 
 ## What I verified before shipping
 
@@ -350,6 +374,16 @@ in the ruin, waiting for the first press.
   this pass (`window.__debugState`/`__debugSetState` in `GameCanvas.tsx`,
   and a `WEAPON_DROP_CHANCE` bumped to 1 to make drops reliable to trigger)
   were both fully reverted before committing.
+
+- After the final refinement pass, the equivalent full preflight was green:
+  Astro typecheck and build, oxlint, stylelint, all 98 tests across 5 files,
+  and the evidence check. The tests now cover the full-health transition,
+  expanded attack radius, wisp firing and wall collision, cross-tier pursuit,
+  one-hit-per-frame damage, complete six-weapon sprite coverage, and a dynamic
+  ground-to-ledged recovery climb in the last level. Rendered checks at
+  1920×1080 and 390×844 confirmed the title scene and HUD remain unclipped,
+  sprite assets decode without console warnings, and the narrow viewport
+  settles correctly after its initial asset-loading frame.
 
 ## Known limitations / left for the marked run
 
