@@ -162,10 +162,45 @@ in the ruin, waiting for the first press.
    leave now" signal, consistent with the no-tutorial-text constraint.
    [`73dc001`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit5-TaveWang/commit/73dc001)
 
+7. **A sixth departure: hand-drawn Canvas primitives replaced with licensed
+   pixel art.** Requested directly, and scoped to stay honest about it ---
+   every visual since the first commit had been a programmatically-drawn
+   rectangle or circle; this swaps those in for CC0 sprite sheets (a hero,
+   three enemy portraits, four tile textures, three hit/death effects) while
+   changing nothing about how or when they're drawn. `src/game/sprites.ts` is
+   new: it owns loading (`loadImage`, guarded against Astro's Node-side SSR
+   pass where `Image` doesn't exist), readiness checks (`isReady`, since a
+   zero-size not-yet-decoded image throws inside `drawImage` rather than
+   no-op'ing), hero frame-strip animation derived from existing
+   `PlayerState` fields rather than a separate animation clock
+   (`pickHeroFrame` --- an active dash always shows the attack strip, a
+   recent hit always shows the hit strip, with no risk of drifting out of
+   sync), and `drawTintedSprite` for the hit/death effect sprites, which ship
+   uncoloured and are recoloured in code with a `source-atop` fill so only
+   the sprite's own alpha shape picks up the tint. `render.ts`'s existing
+   `drawPlayer`/`drawEnemy`/hazard-drawing functions each got an `isReady`
+   branch that draws the sprite when loaded and falls back to the original
+   primitive otherwise, so a slow-loading asset degrades to the old look
+   rather than a blank frame. Every source is recorded, including two
+   packs that disclose their own art as AI-assisted, in
+   `src/assets/sprites/LICENSES.md` rather than only here.
+   [`332ddc9`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit5-TaveWang/commit/332ddc9)
+
+   The same commit also made Level 0 ("Threshold") and Level 2 ("Sentinel's
+   Approach") bigger and more complex, since the new art needed enough space
+   between encounters to actually read rather than being crammed into the
+   original tutorial-sized layout --- more ground segments and a second
+   stepping-stone gap in Level 0, an extra platform tier in Level 2. This
+   follows the same density-tuning pattern as the fourth departure above:
+   `LevelDef` data only, no new mechanic, and every gap width checked against
+   the game's own jump-physics numbers the same way the original level pass
+   was.
+
 ## What I verified before shipping
 
-- `pnpm check` (typecheck, build, lint, spec + unit tests): green, 25/25
-  tests passing across 3 files.
+- `pnpm check` (typecheck, build, lint, spec + unit tests): green, 61/61
+  tests passing across 5 files (this test count reflects every pass in
+  this document, not just the first).
 - `pnpm build` produces a working `dist/`; served locally with
   `astro preview` and driven with `agent-browser` rather than just read.
 - Played a full encounter loop end-to-end in the browser: title screen to
@@ -217,6 +252,21 @@ in the ruin, waiting for the first press.
   same reduced-live-coverage tradeoff already named honestly below for the
   later encounters.
 
+- After the sprite pass, played live with `agent-browser` at both marking
+  viewports rather than trusting a static title-screen render: at 1920x1080,
+  confirmed jumping the widened Level 0 gap, a dash-kill sequence that
+  correctly damaged and killed a drifter through its full
+  `idle → patrol → stagger → dead` state chain with the smoke-dissolve
+  death effect visible mid-fade, an enemy contact hit showing the
+  invuln/hit-flash outline on the hero, and a clean restart back to the
+  title screen. At 390x844, confirmed the title screen, HUD (health pips,
+  dash ring, minimap) and an in-encounter frame all render correctly with
+  no overlap or clipping at the narrower width. A temporary
+  `window.__debugState` hook was added to `GameCanvas.tsx` to read live
+  `RunState` during this pass (the same pattern as the earlier
+  spawn-safety and branching-map investigations above) and fully removed
+  before committing.
+
 ## Known limitations / left for the marked run
 
 - I played through the first encounter and upgrade screen thoroughly, and
@@ -228,6 +278,10 @@ in the ruin, waiting for the first press.
   a full run-through before the crit.
 - No accessibility or performance instrumentation beyond what `CLAUDE.md`
   already flags as out of scope for this template.
-- All visuals and sounds are original, programmatically drawn (Canvas 2D
-  primitives) or synthesised (Web Audio) --- there are no external assets
-  and nothing to licence.
+- Sounds remain fully original and synthesised (Web Audio) --- nothing to
+  licence there. Visuals are a mix: level geometry, particles, HUD, and the
+  minimap are still Canvas 2D primitives drawn from scratch, while the hero,
+  enemies, tiles, and hit/death effects are CC0-licensed sprites (see
+  `src/assets/sprites/LICENSES.md` for exact sources); none of it is copied
+  from Dead Cells, Hollow Knight, or any other specific benchmark game's
+  actual character, sprite, or level art.
