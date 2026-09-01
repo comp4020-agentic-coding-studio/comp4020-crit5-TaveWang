@@ -1,6 +1,7 @@
-// All visuals are drawn with Canvas 2D primitives (rects, arcs, gradients) --
-// there are no image assets, so there is nothing to licence. Silhouettes and
-// colour do the work that sprites would elsewhere.
+// Terrain, the hero, and enemies are drawn from CC0 sprite art (see
+// src/assets/sprites/LICENSES.md for sources); particles, the HUD, and every
+// gameplay-feedback overlay (telegraph outlines, stagger flash, health pips,
+// the dash-ready gauge) stay plain Canvas 2D primitives, same as before.
 import type { Enemy, PlayerState, RunState } from "./types";
 import { getSlashHitbox } from "./combat";
 import {
@@ -14,6 +15,17 @@ import {
   type WallRect,
 } from "./level";
 import { FOG_CELL, isRevealed, terrainGridFor } from "./fog";
+import {
+  ENEMY_SPRITES,
+  FX_SPRITES,
+  TILE_SPRITES,
+  drawSheetFrame,
+  drawStaticSprite,
+  drawTintedSprite,
+  isReady,
+  pickHeroFrame,
+  tilePattern,
+} from "./sprites";
 
 const PALETTE = {
   bgFar: "#14121d",
@@ -49,6 +61,7 @@ export function drawFrame(
   reducedMotion: boolean,
 ): void {
   ctx.save();
+  ctx.imageSmoothingEnabled = false;
   const shakeAmt = reducedMotion ? 0 : state.shake;
   const shakeX = shakeAmt ? (Math.random() - 0.5) * shakeAmt : 0;
   const shakeY = shakeAmt ? (Math.random() - 0.5) * shakeAmt : 0;
@@ -70,7 +83,7 @@ export function drawFrame(
   for (const hazard of level.hazards) drawHazard(ctx, hazard);
   drawExit(ctx, level, state.phase === "cleared", state.time);
   for (const enemy of state.enemies) drawEnemy(ctx, enemy);
-  drawPlayer(ctx, state.player);
+  drawPlayer(ctx, state.player, state.time);
   drawParticles(ctx, state.particles);
 
   ctx.restore();
@@ -113,13 +126,15 @@ function drawBackground(ctx: CanvasRenderingContext2D, width: number, height: nu
 }
 
 function drawWall(ctx: CanvasRenderingContext2D, wall: WallRect): void {
-  ctx.fillStyle = PALETTE.wall;
+  const pattern = tilePattern(ctx, TILE_SPRITES.wall);
+  ctx.fillStyle = pattern ?? PALETTE.wall;
   ctx.fillRect(wall.x, wall.y, wall.width, wall.height);
 }
 
 function drawGround(ctx: CanvasRenderingContext2D, segments: GroundSegment[]): void {
+  const pattern = tilePattern(ctx, TILE_SPRITES.ground);
   for (const g of segments) {
-    ctx.fillStyle = PALETTE.ground;
+    ctx.fillStyle = pattern ?? PALETTE.ground;
     ctx.fillRect(g.x, g.y, g.width, 400);
     ctx.fillStyle = PALETTE.groundEdge;
     ctx.fillRect(g.x, g.y - 4, g.width, 4);
@@ -127,9 +142,10 @@ function drawGround(ctx: CanvasRenderingContext2D, segments: GroundSegment[]): v
 }
 
 function drawPlatform(ctx: CanvasRenderingContext2D, platform: StaticPlatform): void {
+  const pattern = tilePattern(ctx, TILE_SPRITES.platform);
   ctx.fillStyle = PALETTE.groundEdge;
   ctx.fillRect(platform.x, platform.y, platform.width, 14);
-  ctx.fillStyle = PALETTE.ground;
+  ctx.fillStyle = pattern ?? PALETTE.ground;
   ctx.fillRect(platform.x, platform.y + 14, platform.width, 10);
 }
 
@@ -155,6 +171,7 @@ function drawHazard(ctx: CanvasRenderingContext2D, hazard: Hazard): void {
 // enemy survives, pulsing open once the level's `"cleared"` phase is entered.
 function drawExit(ctx: CanvasRenderingContext2D, level: LevelDef, active: boolean, time: number): void {
   const rect = exitRect(level);
+  const archReady = isReady(TILE_SPRITES.exit);
 
   if (active) {
     const pulse = 0.6 + 0.4 * Math.sin(time * 3.2);
@@ -168,23 +185,34 @@ function drawExit(ctx: CanvasRenderingContext2D, level: LevelDef, active: boolea
     ctx.fill();
     ctx.restore();
 
+    if (archReady) drawStaticSprite(ctx, TILE_SPRITES.exit, rect.x, rect.y, rect.w, rect.h, false);
+
     ctx.strokeStyle = PALETTE.exitOpen;
     ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.roundRect(rect.x, rect.y, rect.w, rect.h, [rect.w / 2, rect.w / 2, 0, 0]);
     ctx.stroke();
   } else {
-    ctx.fillStyle = PALETTE.exitClosed;
-    ctx.beginPath();
-    ctx.roundRect(rect.x, rect.y, rect.w, rect.h, [rect.w / 2, rect.w / 2, 0, 0]);
-    ctx.fill();
+    if (archReady) {
+      ctx.save();
+      ctx.filter = "brightness(0.45) saturate(0.5)";
+      drawStaticSprite(ctx, TILE_SPRITES.exit, rect.x, rect.y, rect.w, rect.h, false);
+      ctx.restore();
+    } else {
+      ctx.fillStyle = PALETTE.exitClosed;
+      ctx.beginPath();
+      ctx.roundRect(rect.x, rect.y, rect.w, rect.h, [rect.w / 2, rect.w / 2, 0, 0]);
+      ctx.fill();
+    }
     ctx.strokeStyle = PALETTE.groundEdge;
     ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.roundRect(rect.x, rect.y, rect.w, rect.h, [rect.w / 2, rect.w / 2, 0, 0]);
     ctx.stroke();
   }
 }
 
-function drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerState): void {
+function drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerState, time: number): void {
   const flicker = player.invulnTimer > 0 && Math.floor(player.invulnTimer * 20) % 2 === 0;
   if (flicker) ctx.globalAlpha = 0.4;
 
@@ -195,31 +223,36 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerState): void {
     ctx.fill();
   }
 
-  const w = 28;
-  const h = 46;
+  // A slightly larger box than the 28x46 hit-box: the sprite's own frame is
+  // 24px wide pixel art, and drawing it hit-box-sized reads as too small.
+  const w = 40;
+  const h = 48;
   const x = player.pos.x - w / 2;
   const y = player.pos.y - h;
+  const frame = pickHeroFrame(player, time);
 
-  ctx.fillStyle = PALETTE.player;
-  ctx.beginPath();
-  ctx.roundRect(x, y, w, h, 10);
-  ctx.fill();
-
-  ctx.fillStyle = PALETTE.playerCore;
-  const eyeX = player.facing === 1 ? x + w - 9 : x + 3;
-  ctx.beginPath();
-  ctx.arc(eyeX, y + 14, 3.5, 0, Math.PI * 2);
-  ctx.fill();
+  if (isReady(frame.sheet.image)) {
+    drawSheetFrame(ctx, frame, x, y, w, h, player.facing !== 1);
+  } else {
+    ctx.fillStyle = PALETTE.player;
+    ctx.beginPath();
+    ctx.roundRect(player.pos.x - 14, y, 28, h, 10);
+    ctx.fill();
+  }
 
   const slash = getSlashHitbox(player);
   if (slash) {
-    ctx.fillStyle = "rgba(246, 231, 177, 0.55)";
-    ctx.beginPath();
-    ctx.roundRect(slash.x, slash.y, slash.w, slash.h, 8);
-    ctx.fill();
-    ctx.strokeStyle = PALETTE.slash;
-    ctx.lineWidth = 2;
-    ctx.stroke();
+    if (isReady(FX_SPRITES.slash)) {
+      drawTintedSprite(ctx, FX_SPRITES.slash, slash.x, slash.y, slash.w, slash.h, PALETTE.slash, 0.85);
+    } else {
+      ctx.fillStyle = "rgba(246, 231, 177, 0.55)";
+      ctx.beginPath();
+      ctx.roundRect(slash.x, slash.y, slash.w, slash.h, 8);
+      ctx.fill();
+      ctx.strokeStyle = PALETTE.slash;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
   }
 
   ctx.globalAlpha = 1;
@@ -232,18 +265,38 @@ function enemyColor(enemy: Enemy): string {
 }
 
 function drawEnemy(ctx: CanvasRenderingContext2D, enemy: Enemy): void {
-  if (enemy.state === "dead") {
-    const t = enemy.deathTimer;
-    ctx.globalAlpha = Math.max(0, t / 0.4);
-  }
-
   const x = enemy.pos.x - enemy.width / 2;
   const y = enemy.pos.y - enemy.height;
 
-  ctx.fillStyle = enemyColor(enemy);
-  ctx.beginPath();
-  ctx.roundRect(x, y, enemy.width, enemy.height, 6);
-  ctx.fill();
+  if (enemy.state === "dead") {
+    const t = Math.max(0, enemy.deathTimer);
+    ctx.globalAlpha = Math.max(0, t / 0.4);
+    // A smoke puff grows in as the body fades out, rather than the body
+    // simply disappearing --- the death effect Kenney's particle pack ships.
+    if (isReady(FX_SPRITES.smoke)) {
+      const grown = enemy.width * (1.4 + (1 - t / 0.4) * 0.6);
+      drawTintedSprite(
+        ctx,
+        FX_SPRITES.smoke,
+        enemy.pos.x - grown / 2,
+        enemy.pos.y - enemy.height / 2 - grown / 2,
+        grown,
+        grown,
+        PALETTE.text,
+        Math.max(0, 1 - t / 0.4) * 0.7,
+      );
+    }
+  }
+
+  const sprite = ENEMY_SPRITES[enemy.kind];
+  if (isReady(sprite)) {
+    drawStaticSprite(ctx, sprite, x, y, enemy.width, enemy.height, enemy.patrolFacing === -1);
+  } else {
+    ctx.fillStyle = enemyColor(enemy);
+    ctx.beginPath();
+    ctx.roundRect(x, y, enemy.width, enemy.height, 6);
+    ctx.fill();
+  }
 
   if (enemy.state === "telegraph") {
     const progress = 1 - Math.max(0, enemy.stateTimer) / enemy.telegraphDuration;
@@ -281,12 +334,19 @@ function drawEnemy(ctx: CanvasRenderingContext2D, enemy: Enemy): void {
 }
 
 function drawParticles(ctx: CanvasRenderingContext2D, particles: RunState["particles"]): void {
+  const sparkReady = isReady(FX_SPRITES.spark);
   for (const p of particles) {
-    ctx.globalAlpha = Math.max(0, p.life / p.maxLife);
-    ctx.fillStyle = p.color;
-    ctx.beginPath();
-    ctx.arc(p.pos.x, p.pos.y, p.size, 0, Math.PI * 2);
-    ctx.fill();
+    const alpha = Math.max(0, p.life / p.maxLife);
+    if (sparkReady) {
+      const d = p.size * 4;
+      drawTintedSprite(ctx, FX_SPRITES.spark, p.pos.x - d / 2, p.pos.y - d / 2, d, d, p.color, alpha);
+    } else {
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.pos.x, p.pos.y, p.size, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
   ctx.globalAlpha = 1;
 }

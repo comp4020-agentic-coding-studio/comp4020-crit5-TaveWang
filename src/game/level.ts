@@ -75,26 +75,35 @@ const KILL_PLANE_Y = 560;
 
 export const LEVELS: LevelDef[] = [
   {
+    // "Threshold" -> was one flat corridor with a single gap; now a second
+    // gap bridged by a stepping-stone platform, a ground spike to hop, and a
+    // third drifter guarding the new final stretch to the exit.
     name: "Threshold",
-    arenaWidth: 1400,
+    arenaWidth: 1900,
     worldTop: 0,
     worldBottom: 540,
     entryX: 140,
     entryY: GROUND_Y,
-    exitX: 1350,
+    exitX: 1850,
     exitY: GROUND_Y,
     killPlaneY: KILL_PLANE_Y,
     groundSegments: [
-      { x: 0, width: 760, y: GROUND_Y },
-      { x: 900, width: 500, y: GROUND_Y },
+      { x: 0, width: 760, y: GROUND_Y }, // entry, gap at 760-900
+      { x: 900, width: 500, y: GROUND_Y }, // gap at 1400-1500
+      { x: 1500, width: 400, y: GROUND_Y }, // final stretch to the exit
     ],
-    platforms: [{ x: 260, width: 160, y: 330 }],
+    platforms: [
+      { x: 260, width: 160, y: 330 }, // bonus platform over the entry stretch
+      { x: 1000, width: 140, y: 300 }, // overhead bonus above the mid stretch
+      { x: 1420, width: 120, y: 340 }, // stepping-stone bridging the second gap
+    ],
     movingPlatforms: [],
-    hazards: [],
+    hazards: [{ x: 1120, width: 30, height: 14, y: GROUND_Y }], // ground spike, dodge by jumping
     walls: [],
     spawns: [
       { kind: "drifter", x: 560, y: GROUND_Y, patrolMinX: 460, patrolMaxX: 680 },
       { kind: "drifter", x: 1150, y: GROUND_Y, patrolMinX: 1000, patrolMaxX: 1300 },
+      { kind: "drifter", x: 1680, y: GROUND_Y, patrolMinX: 1550, patrolMaxX: 1800 },
     ],
   },
   {
@@ -152,7 +161,7 @@ export const LEVELS: LevelDef[] = [
     // climb fork (zigzag staircase vs vertical elevator) reconnecting on a
     // high corridor, with a dead-end spur off its far end.
     name: "Sentinel's Approach",
-    arenaWidth: 2150,
+    arenaWidth: 2350,
     worldTop: -640,
     worldBottom: 600,
     entryX: 100,
@@ -175,6 +184,7 @@ export const LEVELS: LevelDef[] = [
       { x: 1530, width: 180, y: -240 }, // A6
       { x: 1310, width: 180, y: -350 }, // A7
       { x: 2000, width: 120, y: -460 }, // dead-end spur off the corridor
+      { x: 2160, width: 140, y: -460 }, // spur extends further, one more hop out
     ],
     movingPlatforms: [
       {
@@ -213,6 +223,7 @@ export const LEVELS: LevelDef[] = [
       { kind: "drifter", x: 1700, y: -460, patrolMinX: 1600, patrolMaxX: 1800 },
       { kind: "drifter", x: 1140, y: 330, patrolMinX: 1070, patrolMaxX: 1210 }, // guarding the pre-climb bonus platform
       { kind: "drifter", x: 1900, y: GROUND_Y, patrolMinX: 1830, patrolMaxX: 1970 }, // guarding the elevator's boarding point
+      { kind: "drifter", x: 2220, y: -460, patrolMinX: 2170, patrolMaxX: 2290 }, // guarding the extended spur
     ],
   },
   {
