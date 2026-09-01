@@ -1,33 +1,40 @@
-<!--
-DRAFT — written by the agent from the session's actual work, not the
-student's own words. Read it, cut anything that doesn't match how you
-actually experienced the week, and rewrite the rest in your own voice
-before submitting. The events described (the debug-hook technique, the
-spawn-safety bug) really happened this session — the *reflection* on them
-needs to be yours.
--->
-
 ## What was the breakthrough that moved the work forward?
 
-The stuck point was a fairness bug I couldn't see just by reading the code:
-after picking an upgrade, the next encounter sometimes felt like it hit me
-before I'd even reacted. Screenshots weren't enough to tell whether that was
-real or just my own reaction time, and guessing from pixels wasn't going
-anywhere. The breakthrough was giving up on inferring state from the canvas
-and instead wiring a one-line debug hook into the running game so I could
-read the exact player and enemy positions as numbers. That turned a vague
-"feels unfair" into a concrete fact: the player and an enemy really were at
-the same coordinate the instant the upgrade screen closed. Once the bug was
-a number instead of a feeling, the fix was obvious and quick to verify.
+The main breakthrough was learning to turn a problem that only "felt wrong"
+into something I could observe and test. After choosing an upgrade, the next
+encounter sometimes damaged the player immediately. A screenshot could show
+the result, but it could not tell me whether the game was unfair or whether I
+had simply reacted too slowly. I temporarily exposed the live player and enemy
+positions and found that they could spawn at almost the same coordinate. Once
+I could see the exact state, the solution became clear: reposition the player
+at a safe distance whenever the next encounter begins, then verify that
+distance directly.
+
+The same approach helped during the final refinement. Instead of treating
+comments such as "the last level is a dead end" or "enemies do not follow me"
+as purely visual issues, I converted them into checkable rules. The final-level
+vine now connects the ground to a real landing surface, enemies can move toward
+the player's height after becoming aggressive, and tests verify both
+behaviours. This made the work move faster because I was no longer repeatedly
+guessing at values and replaying the same section without knowing what had
+changed.
 
 ## What did this change about the developer you want to be?
 
-*(Placeholder — this is the part that most needs to be in your own words.)*
-This week reinforced that "I played it and it felt fine" isn't the same as
-verifying a game is fair, and that when a bug is hard to pin down, it's
-often worth spending time building a small, temporary tool to see the real
-state rather than continuing to guess from the outside — and then removing
-that tool once it's done its job. Replace this paragraph with what actually
-changed for you: was it about trusting playtesting over assumptions,
-patience with instrumentation, something about scope, or something else
-entirely?
+This project changed my idea of what useful testing looks like for an
+interactive game. I used to think that if a game built successfully and felt
+acceptable during one playthrough, it was probably finished. Crit 5 showed me
+that a playable result can still hide unfair transitions, unreachable routes,
+stacked damage, or layouts that only fail at one viewport. I want to become a
+developer who treats those details as part of the design rather than as polish
+to add at the end.
+
+I also want to keep using small, temporary pieces of instrumentation when the
+screen does not reveal enough information. They should support playtesting,
+not replace it: the browser shows whether the experience communicates clearly,
+while state inspection and automated tests explain why it behaves that way.
+For this project, combining both methods was more reliable than trusting either
+one alone. In future work I want to define important gameplay promises early
+— such as one damage event per frame, a recoverable route through every level,
+and complete visual assets for every item — and make those promises testable as
+the game grows.
