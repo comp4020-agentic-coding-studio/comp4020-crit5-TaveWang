@@ -207,6 +207,54 @@ in the ruin, waiting for the first press.
    the game's own jump-physics numbers the same way the original level pass
    was.
 
+8. **A seventh departure: weapon drops, dual-equip combat, and a fix for
+   an un-jumpable platform.** Requested directly (verbatim: "现在开始增加游戏趣味性
+   打败怪物后可随机掉落武器 一个英雄可以同时装备两把武器... 剩下的你可以自由发挥一点"
+   --- kill enemies for a chance at a weapon drop, carry two weapons at
+   once, with room to design the rest). Two design calls were confirmed
+   before building rather than assumed: each weapon is fixed to one slot
+   (melee-only or ranged-only), so Y always means melee and U always means
+   ranged regardless of what's equipped; and picking up a weapon for an
+   already-full slot opens a same-slot swap choice rather than auto-discarding
+   either weapon, reusing the existing upgrade-choice overlay component
+   exactly (`GameCanvas.tsx`'s `.upgrade-overlay`/`.upgrade-card`, now driven
+   by a new `resolveWeaponChoice` alongside the existing `chooseUpgrade`).
+   `src/game/weapons.ts` is new: six weapons (three melee, three ranged),
+   `rollWeaponDrop(levelIndex)` capping the rolled tier at
+   `min(2, levelIndex)` so a level-0 kill never drops anything beyond the
+   base tier while later levels can roll up to tier 2 --- the "drops get more
+   dangerous deeper into the run" rule made an explicit, testable invariant.
+   Combat itself (`getMeleeHitbox`/`resolveMeleeDamage`,
+   `spawnProjectile`/`updateProjectiles` in `src/game/combat.ts`) mirrors the
+   existing dash-slash pattern exactly rather than inventing a new shape:
+   same per-swing hit-once bookkeeping (`hitEnemiesThisMelee`, alongside the
+   pre-existing `hitEnemiesThisDash`), same hit-effects code path (shake,
+   particles, the `"hit"` sound) shared across slash, melee, and projectile
+   hits alike.
+
+   The inventory panel (`drawInventory`, `src/game/render.ts`) stays inside
+   the no-tutorial-text constraint the same way the dash ring and health
+   pips already do: two fixed slots, each a coloured glyph (triangle for
+   melee, diamond for ranged) with tier pips underneath, no text and no key
+   glyphs anywhere --- which key controls which slot is conveyed purely by
+   the slots' fixed left/right screen position (Y sits left of U on a
+   QWERTY row, so melee is always the left slot).
+
+   The unrelated but overdue fix: Level 2's `mp_tower1` moving platform
+   travelled continuously between `y: -460` and `y: 420` with no turnaround
+   pause, unlike every other moving platform in the game, so there was
+   never a safe window to time a jump onto it. The requested fix sidesteps
+   timing entirely --- replaced with a climbable vine at the same x-span
+   (`src/game/level.ts`), new climbing physics in `updatePlayerPhysics`
+   (`src/game/run.ts`): holding the existing jump key ascends at
+   `CLIMB_SPEED`, releasing it slides down slowly at `CLIMB_SLIDE_SPEED`
+   rather than free-falling, both new constants in `src/game/constants.ts`.
+   Horizontal movement and the existing landing logic are untouched ---
+   climbing simply disengages when the player's `y` crosses the vine's top
+   or bottom, at which point gravity and the ordinary one-way-landing check
+   take back over.
+   [`0c8e703`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit5-TaveWang/commit/0c8e703)
+
 ## What I verified before shipping
 
 - `pnpm check` (typecheck, build, lint, spec + unit tests): green, 61/61
@@ -277,6 +325,31 @@ in the ruin, waiting for the first press.
   `RunState` during this pass (the same pattern as the earlier
   spawn-safety and branching-map investigations above) and fully removed
   before committing.
+
+- After the weapon/vine pass, `pnpm check` stayed green (85/85 tests, up
+  from 54). Live-played with `agent-browser` at 1920x1080: killed enemies
+  in Level 0-1 until a weapon dropped, confirmed the bottom-left inventory
+  panel updates on pickup (empty-slot auto-equip), then farmed a second
+  same-slot drop and confirmed the full-slot swap overlay appears and
+  resolves correctly both ways (keep current / take new), reading live
+  `RunState` through a temporary `window.__debugState` hook the same way
+  earlier passes did. Confirmed Y and U fire independently with separate
+  cooldowns (simultaneous non-zero melee-swing and ranged-cooldown timers
+  plus a live projectile in one frame), a melee hit one-shotting a
+  health-2 enemy with the broadsword, and a ranged shot one-shotting a
+  health-2 enemy with the crossbow at range. For the vine fix specifically,
+  drove the climb directly rather than only reading the code: holding jump
+  moved the player from the vine's base (`y: 420`) to its top (`y: -460`)
+  at roughly `CLIMB_SPEED`, landing cleanly on the high corridor
+  (`onGround: true`, velocity zeroed, no fall-through); releasing partway
+  up slid the player down at roughly `CLIMB_SLIDE_SPEED` --- about a third
+  of the ascend speed and nothing like free-fall. Repeated the same
+  inventory-panel and HUD check at 390x844: the inventory panel, health
+  pips, dash ring, and minimap all render with clear separation and no
+  overlap at the phone viewport. The two temporary test-only aids used for
+  this pass (`window.__debugState`/`__debugSetState` in `GameCanvas.tsx`,
+  and a `WEAPON_DROP_CHANCE` bumped to 1 to make drops reliable to trigger)
+  were both fully reverted before committing.
 
 ## Known limitations / left for the marked run
 
