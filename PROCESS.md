@@ -103,6 +103,23 @@ in the ruin, waiting for the first press.
    both here rather than presenting the bigger scope as if it were the
    original plan.
 
+   A third departure followed the same pattern: once the levels were
+   branching and backtrackable, seeing the whole layout on screen from the
+   first frame made that structure pointless, so exploration itself became
+   part of the design --- a fog-of-war minimap in the bottom-right corner
+   that reveals a level's terrain only as the wanderer actually walks
+   through it. `src/game/fog.ts` keeps a coarse per-level grid, marked
+   "seen" in a radius around the player each frame
+   (mutated in place, the same convention `combat.ts` already uses for
+   `hitEnemiesThisDash`, rather than copying a whole grid every tick), and
+   reset to fully unrevealed on every new level. `render.ts`'s new
+   `drawMinimap` draws revealed terrain, revealed open air, and unrevealed
+   fog as three distinct tones inside a fixed HUD panel, plus a player dot
+   and a dashed outline of the current camera viewport. This is spatial
+   feedback, not instructional text, so it stays inside the no-tutorial
+   constraint; it adds no image assets, only Canvas 2D primitives.
+   [`d6718ba`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit5-TaveWang/commit/d6718ba)
+
 ## What I verified before shipping
 
 - `pnpm check` (typecheck, build, lint, spec + unit tests): green, 25/25
@@ -128,6 +145,16 @@ in the ruin, waiting for the first press.
   waypoint held; the vertical camera clamp tracks without jitter at both
   viewports; the Level 3 shaft correctly opens at `y: -260` rather than
   dropping straight onto the boss floor.
+- After adding the fog-of-war minimap, played it live with `agent-browser`
+  at both marking viewports: the panel sits bottom-right without
+  overlapping the health pips or dash-cooldown ring at either size, fog
+  clears in a widening strip as the player walks (confirmed the revealed
+  area growing across three successive screenshots), the gold player dot
+  and dashed camera outline track correctly, and the panel stays legible
+  rather than illegibly tiny on the 390x844 phone viewport. Also confirmed
+  a full run restart (defeat, walking into a level-0 pit) returns to the
+  title screen with the minimap hidden, and a fresh run starts with the
+  map fully fogged again.
 
 ## Known limitations / left for the marked run
 
