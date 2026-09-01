@@ -5,9 +5,11 @@ import type { Enemy, PlayerState, RunState } from "./types";
 import { getSlashHitbox } from "./combat";
 import {
   LEVELS,
+  exitRect,
   movingPlatformPositionAt,
   type GroundSegment,
   type Hazard,
+  type LevelDef,
   type StaticPlatform,
   type WallRect,
 } from "./level";
@@ -31,6 +33,8 @@ const PALETTE = {
   healthEmpty: "#332c46",
   dashReady: "#5bc8a8",
   dashCooling: "#332c46",
+  exitClosed: "#2a2640",
+  exitOpen: "#5bc8a8",
   text: "#cfc9de",
   fogSeenAir: "rgba(207, 201, 222, 0.06)",
   minimapPanel: "rgba(13, 12, 20, 0.72)",
@@ -64,6 +68,7 @@ export function drawFrame(
     drawPlatform(ctx, { x: p.x, width: mp.width, y: p.y });
   }
   for (const hazard of level.hazards) drawHazard(ctx, hazard);
+  drawExit(ctx, level, state.phase === "cleared", state.time);
   for (const enemy of state.enemies) drawEnemy(ctx, enemy);
   drawPlayer(ctx, state.player);
   drawParticles(ctx, state.particles);
@@ -143,6 +148,40 @@ function drawHazard(ctx: CanvasRenderingContext2D, hazard: Hazard): void {
   ctx.closePath();
   ctx.fill();
   ctx.globalAlpha = 1;
+}
+
+// The exit is always visible so its state change is the only "you can leave
+// now" feedback the game gives --- no on-screen text. Closed/dim while any
+// enemy survives, pulsing open once the level's `"cleared"` phase is entered.
+function drawExit(ctx: CanvasRenderingContext2D, level: LevelDef, active: boolean, time: number): void {
+  const rect = exitRect(level);
+
+  if (active) {
+    const pulse = 0.6 + 0.4 * Math.sin(time * 3.2);
+    ctx.save();
+    ctx.shadowColor = PALETTE.exitOpen;
+    ctx.shadowBlur = 18 + pulse * 10;
+    ctx.fillStyle = PALETTE.exitOpen;
+    ctx.globalAlpha = 0.55 + pulse * 0.25;
+    ctx.beginPath();
+    ctx.roundRect(rect.x, rect.y, rect.w, rect.h, [rect.w / 2, rect.w / 2, 0, 0]);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.strokeStyle = PALETTE.exitOpen;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.roundRect(rect.x, rect.y, rect.w, rect.h, [rect.w / 2, rect.w / 2, 0, 0]);
+    ctx.stroke();
+  } else {
+    ctx.fillStyle = PALETTE.exitClosed;
+    ctx.beginPath();
+    ctx.roundRect(rect.x, rect.y, rect.w, rect.h, [rect.w / 2, rect.w / 2, 0, 0]);
+    ctx.fill();
+    ctx.strokeStyle = PALETTE.groundEdge;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
 }
 
 function drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerState): void {

@@ -10,7 +10,7 @@ import {
 } from "./combat";
 import { resetEnemyIds, spawnEnemy, updateEnemy } from "./enemies";
 import { rollUpgradeChoices, applyUpgrade } from "./upgrades";
-import { LEVELS, findLanding, movingPlatformPositionAt, resolveSurfaces, type LevelDef } from "./level";
+import { LEVELS, exitRect, findLanding, movingPlatformPositionAt, resolveSurfaces, type LevelDef } from "./level";
 import { createFogState, revealAround } from "./fog";
 import {
   BASE_STATS,
@@ -350,8 +350,12 @@ export function update(state: RunState, dtRaw: number, input: InputState, viewpo
     };
   }
 
+  // Killing every enemy only unlocks the exit --- reaching it is what
+  // actually clears the level. "cleared" is an otherwise-unused RunPhase
+  // that exists for exactly this: enemies are down but the player still has
+  // to walk/dash to the exit, so the world keeps simulating normally.
   const allDead = enemies.every((e) => e.state === "dead" && e.deathTimer <= 0);
-  if (allDead && enemies.length > 0) {
+  if (allDead && enemies.length > 0 && rectsOverlap(playerRect, exitRect(level))) {
     const isLast = state.encounterIndex >= LEVELS.length - 1;
     if (isLast) {
       events.push("victory");
@@ -393,6 +397,7 @@ export function update(state: RunState, dtRaw: number, input: InputState, viewpo
       particles: advancedParticles,
       shake,
       camera,
+      phase: allDead && enemies.length > 0 ? "cleared" : state.phase,
       time: state.time + dt,
     },
     events,

@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { applyDamageToPlayer, checkPlayerRunEnd, resolveSlashDamage } from "../src/game/combat";
 import { BASE_STATS, GROUND_Y } from "../src/game/constants";
-import type { Enemy, PlayerState } from "../src/game/types";
+import { LEVELS } from "../src/game/level";
+import { createInitialRun, update } from "../src/game/run";
+import type { Enemy, PlayerState, RunState } from "../src/game/types";
+
+const NO_INPUT = { left: false, right: false, jumpPressed: false, dashPressed: false };
 
 // These exercise the dash-slash rule directly against the pure game-logic
 // layer --- no canvas, no DOM, matching the crit-5 brief's requirement that
@@ -123,6 +127,60 @@ describe("player damage and invulnerability", () => {
     const second = applyDamageToPlayer(first, 1);
 
     expect(second.health).toBe(first.health);
+  });
+});
+
+// Killing every enemy only unlocks the exit --- the level isn't cleared
+// until the player actually reaches it. These exercise that gate directly
+// against the run loop, the same way the dash-slash rule above is tested
+// without a canvas.
+describe("level-clear: exit gates the transition", () => {
+  const level0 = LEVELS[0];
+  const stillDash = { active: false, timer: 0, cooldownTimer: 0, dir: 1 as const, originY: GROUND_Y };
+
+  it("stays in the cleared phase when all enemies are dead but the player hasn't reached the exit", () => {
+    const state: RunState = {
+      ...createInitialRun(),
+      phase: "encounter",
+      enemies: [makeEnemy({ state: "dead", deathTimer: 0 })],
+      player: makePlayer({ pos: { x: 200, y: GROUND_Y }, dash: stillDash }),
+    };
+
+    const { state: next } = update(state, 1 / 60, NO_INPUT, 960);
+
+    expect(next.phase).toBe("cleared");
+  });
+
+  it("transitions to upgrade once all enemies are dead and the player reaches the exit", () => {
+    const state: RunState = {
+      ...createInitialRun(),
+      phase: "encounter",
+      enemies: [makeEnemy({ state: "dead", deathTimer: 0 })],
+      player: makePlayer({
+        pos: { x: level0.exitX, y: level0.exitY },
+        dash: { ...stillDash, originY: level0.exitY },
+      }),
+    };
+
+    const { state: next } = update(state, 1 / 60, NO_INPUT, 960);
+
+    expect(next.phase).toBe("upgrade");
+  });
+
+  it("does not skip the fight: standing at the exit while enemies are still alive keeps the encounter going", () => {
+    const state: RunState = {
+      ...createInitialRun(),
+      phase: "encounter",
+      enemies: [makeEnemy({ state: "patrol" })],
+      player: makePlayer({
+        pos: { x: level0.exitX, y: level0.exitY },
+        dash: { ...stillDash, originY: level0.exitY },
+      }),
+    };
+
+    const { state: next } = update(state, 1 / 60, NO_INPUT, 960);
+
+    expect(next.phase).toBe("encounter");
   });
 });
 

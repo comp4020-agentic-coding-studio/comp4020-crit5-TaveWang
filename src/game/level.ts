@@ -4,7 +4,8 @@
 // decorative walls are all plain data, so a level's shape --- and whether
 // every spawn and entry point actually sits on real ground --- can be checked
 // in `spec/level.test.ts` without touching the canvas.
-import type { EnemyKind, Vec2 } from "./types";
+import type { EnemyKind, Rect, Vec2 } from "./types";
+import { EXIT_HEIGHT, EXIT_WIDTH } from "./constants";
 
 export interface GroundSegment {
   x: number;
@@ -58,6 +59,8 @@ export interface LevelDef {
   worldBottom: number;
   entryX: number;
   entryY: number;
+  exitX: number;
+  exitY: number;
   killPlaneY: number;
   groundSegments: GroundSegment[];
   platforms: StaticPlatform[];
@@ -78,6 +81,8 @@ export const LEVELS: LevelDef[] = [
     worldBottom: 540,
     entryX: 140,
     entryY: GROUND_Y,
+    exitX: 1350,
+    exitY: GROUND_Y,
     killPlaneY: KILL_PLANE_Y,
     groundSegments: [
       { x: 0, width: 760, y: GROUND_Y },
@@ -103,6 +108,8 @@ export const LEVELS: LevelDef[] = [
     worldBottom: 1120,
     entryX: 100,
     entryY: GROUND_Y,
+    exitX: 1150,
+    exitY: 920,
     killPlaneY: 1070,
     groundSegments: [
       { x: 0, width: 600, y: GROUND_Y }, // entry
@@ -150,6 +157,8 @@ export const LEVELS: LevelDef[] = [
     worldBottom: 600,
     entryX: 100,
     entryY: GROUND_Y,
+    exitX: 1850,
+    exitY: -460,
     killPlaneY: 570,
     groundSegments: [
       { x: 0, width: 700, y: GROUND_Y }, // pre-gap, unchanged
@@ -217,6 +226,8 @@ export const LEVELS: LevelDef[] = [
     worldBottom: 620,
     entryX: 1900,
     entryY: -260,
+    exitX: 1900,
+    exitY: -260,
     killPlaneY: KILL_PLANE_Y,
     groundSegments: [{ x: 0, width: 2600, y: GROUND_Y }],
     platforms: [
@@ -249,6 +260,18 @@ export const LEVELS: LevelDef[] = [
     ],
   },
 ];
+
+// The exit is an anchor point like entryX/entryY, not stored geometry, so its
+// hitbox is built the same way playerRect is in run.ts: y is the surface the
+// exit stands on, extending upward by EXIT_HEIGHT, centred horizontally.
+export function exitRect(level: LevelDef): Rect {
+  return {
+    x: level.exitX - EXIT_WIDTH / 2,
+    y: level.exitY - EXIT_HEIGHT,
+    w: EXIT_WIDTH,
+    h: EXIT_HEIGHT,
+  };
+}
 
 export function movingPlatformPositionAt(mp: MovingPlatform, time: number): Vec2 {
   const angle = (time / mp.period) * Math.PI * 2 + mp.phase;

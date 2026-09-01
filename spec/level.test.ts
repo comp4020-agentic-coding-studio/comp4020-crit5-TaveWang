@@ -170,6 +170,16 @@ describe("level structure", () => {
       expect(onGround || onPlatform).toBe(true);
     });
 
+    it(`${level.name}: exit point sits on real ground or a platform`, () => {
+      const onGround = level.groundSegments.some(
+        (g) => level.exitY === g.y && level.exitX >= g.x && level.exitX <= g.x + g.width,
+      );
+      const onPlatform = level.platforms.some(
+        (p) => level.exitY === p.y && level.exitX >= p.x && level.exitX <= p.x + p.width,
+      );
+      expect(onGround || onPlatform).toBe(true);
+    });
+
   }
 });
 

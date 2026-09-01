@@ -11,6 +11,8 @@ export const GROUND_Y = 420;
 export const ARENA_WIDTH = 2600;
 export const PLAYER_WIDTH = 28;
 export const PLAYER_HEIGHT = 46;
+export const EXIT_WIDTH = 64;
+export const EXIT_HEIGHT = 110;
 
 export const COYOTE_TIME = 0.09;
 export const JUMP_BUFFER = 0.12;
