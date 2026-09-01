@@ -120,6 +120,28 @@ in the ruin, waiting for the first press.
    constraint; it adds no image assets, only Canvas 2D primitives.
    [`d6718ba`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit5-TaveWang/commit/d6718ba)
 
+   A fourth ask followed, this time density rather than a new system: bigger,
+   harder levels with more enemies. Unlike the three moves above, this adds
+   no new mechanic --- it's tuning within what already exists.
+   `spawnEncounter` in `src/game/run.ts` instantiates a level's whole
+   `spawns` array at once, so "more enemies" is purely more entries in
+   `LevelDef.spawns` (`src/game/level.ts`); two new hazards are placed the
+   same way, sitting on top of an existing platform using the hazard-damage
+   rect's own convention (`hazard.y` is the surface, extending upward by
+   `hazard.height`, read directly from `src/game/run.ts`'s hazard-damage
+   block before placing either one). Enemy count goes from 6 to 11 across the
+   run and hazards from 1 to 3, but `enemies.ts`'s `TEMPLATES` stats are
+   untouched --- density is a safer difficulty lever than rebalancing numbers
+   already covered by `spec/level.test.ts`'s patrol-clamp and aggro tests,
+   and it left every existing fixture in that file (the exact gap/platform
+   coordinates `findLanding`'s tests depend on) valid with no changes, since
+   nothing but spawns and hazards was added. The one deliberate design check
+   was Level 3's new second-front sentinel on platform R3: because
+   `updateEnemy` never changes an enemy's `y` outside its own platform, it
+   can only threaten a player who climbs to R3, not force a simultaneous hit
+   with the warden below.
+   [`ebcb193`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit5-TaveWang/commit/ebcb193)
+
 ## What I verified before shipping
 
 - `pnpm check` (typecheck, build, lint, spec + unit tests): green, 25/25
@@ -155,6 +177,25 @@ in the ruin, waiting for the first press.
   a full run restart (defeat, walking into a level-0 pit) returns to the
   title screen with the minimap hidden, and a fresh run starts with the
   map fully fogged again.
+- After adding the extra spawns and hazards, `pnpm check` stayed green with
+  no test changes needed (54/54, up from 25 as the suite has grown across
+  every pass above) --- the existing generic `describe("level structure")`
+  block already validates every spawn/patrol range against real ground, so
+  green there is real evidence the new data is well-formed, not just that it
+  parses. Live in the browser at 1920x1080: scripted a dash across Level 0's
+  entry gap and confirmed the new second drifter renders on the far ground
+  segment exactly where placed, then walked straight into its aggro range
+  without reacting and confirmed its attack telegraphs and lands exactly
+  like the original enemies' (the run ended in defeat, which is the correct
+  outcome for ignoring a telegraph, not a bug). Also confirmed a fresh run
+  at the 390x844 phone viewport renders the HUD and minimap correctly with
+  the added level data. I did not live-playtest every new spawn and hazard
+  on Levels 1-3 individually in this pass; I'm relying on the structural
+  tests above plus the hazard-rect math read directly from `run.ts` (each
+  new hazard placed on top of a named platform with clearance on both sides,
+  the same way the one pre-existing hazard already sits on Level 2) --- the
+  same reduced-live-coverage tradeoff already named honestly below for the
+  later encounters.
 
 ## Known limitations / left for the marked run
 
